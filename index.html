@@ -223,19 +223,45 @@
     .tool-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
     .tool-btn.active .kbd { color: #fff; border-color: rgba(255,255,255,.5); }
 
-    .hex-label-bar {
+    .hex-panel {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 8px;
-      flex-wrap: wrap;
-      padding: 8px 10px;
+      padding: 10px;
       background: #f8fafc;
       border: 1px solid var(--border);
       border-radius: 9px;
     }
-    .hex-label-bar.hidden { display: none; }
-    .hex-label-bar .coord { font-size: 12px; color: var(--muted); }
-    .hex-label-bar input { flex: 1 1 180px; }
+    .hex-panel.hidden { display: none; }
+    .hex-panel .coord { font-size: 12px; color: var(--muted); }
+    .hex-panel-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .hex-panel-row .row-label { font-size: 12px; color: var(--muted); }
+    #hexLabelInput { flex: 1 1 180px; }
+
+    .bldg-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .bldg-list:empty::after { content: "none"; font-size: 12px; color: var(--muted); font-style: italic; }
+    .bldg-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 12px;
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      border-radius: 999px;
+      padding: 2px 4px 2px 9px;
+    }
+    .bldg-chip.custom { background: #fef3c7; border-color: #fcd34d; }
+    .bldg-x {
+      font-size: 10px;
+      line-height: 1;
+      padding: 1px 5px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .bldg-x:hover { background: rgba(0,0,0,.08); color: var(--text); }
 
     /* ── Preview modal ── */
     .modal-backdrop {
@@ -375,15 +401,37 @@
 
           <div class="hint" id="hintNote">Left click / drag = paint land · Right click / drag = erase</div>
 
-          <div class="hex-label-bar hidden" id="hexLabelBar">
-            <span class="coord" id="hexCoord"></span>
-            <label>Elevation
-              <input id="hexElev" type="range" min="0" max="20" step="1" style="width:120px;vertical-align:middle;">
-            </label>
-            <span id="hexElevVal" class="coord" style="min-width:16px;color:var(--text);"></span>
-            <input id="hexLabelInput" type="text" placeholder="Hex label (e.g. Royal Palace, Port)…">
-            <button id="hexLabelSaveBtn">Save Label</button>
-            <button id="hexLabelClearBtn">Clear</button>
+          <div class="hex-panel hidden" id="hexLabelBar">
+            <div class="hex-panel-row">
+              <span class="coord" id="hexCoord"></span>
+            </div>
+            <div class="hex-panel-row">
+              <label>Elevation
+                <input id="hexElev" type="range" min="0" max="20" step="1" style="width:120px;vertical-align:middle;">
+              </label>
+              <span id="hexElevVal" class="coord" style="min-width:16px;color:var(--text);"></span>
+            </div>
+            <div class="hex-panel-row">
+              <input id="hexLabelInput" type="text" placeholder="Hex label (e.g. Royal Palace, Port)…">
+              <button id="hexLabelSaveBtn">Save Label</button>
+              <button id="hexLabelClearBtn">Clear</button>
+            </div>
+            <div class="hex-panel-row">
+              <span class="row-label">Buildings <span id="bldgCount" class="coord"></span></span>
+              <div class="bldg-list" id="bldgList"></div>
+            </div>
+            <div class="hex-panel-row">
+              <select id="bldgType">
+                <option value="hospital">Hospital</option>
+                <option value="bar">Bar</option>
+                <option value="casino">Casino</option>
+                <option value="shop">Shop</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <input id="bldgCustomName" type="text" placeholder="Custom name" style="display:none;width:160px;">
+              <button id="bldgAddBtn">Add Building</button>
+              <span id="bldgMsg" class="coord"></span>
+            </div>
           </div>
         </div>
       </main>
@@ -451,6 +499,13 @@
     const SEA_COLOR   = '#75e1ff';
     const BORDER_COL  = '#f0f8ff';
     const LABEL_COL   = '#171717';
+
+    // ── Buildings ───────────────────────────────────────────────────────────────
+    const MAX_BUILDINGS = 4;
+    const BLDG_LABELS = { hospital: 'Hospital', bar: 'Bar', casino: 'Casino', shop: 'Shop' };
+    function buildingLabel(b) {
+      return b.type === 'custom' ? (b.name || 'Custom') : (BLDG_LABELS[b.type] || b.type);
+    }
 
     // ── Elevation / topographic ramp ───────────────────────────────────────────
     const ELEV_MIN = 0, ELEV_MAX = 20;
@@ -593,6 +648,12 @@
     const hexLabelInput    = document.getElementById('hexLabelInput');
     const hexLabelSaveBtn  = document.getElementById('hexLabelSaveBtn');
     const hexLabelClearBtn = document.getElementById('hexLabelClearBtn');
+    const bldgList         = document.getElementById('bldgList');
+    const bldgCount        = document.getElementById('bldgCount');
+    const bldgType         = document.getElementById('bldgType');
+    const bldgCustomName   = document.getElementById('bldgCustomName');
+    const bldgAddBtn       = document.getElementById('bldgAddBtn');
+    const bldgMsg          = document.getElementById('bldgMsg');
 
     const previewBtn      = document.getElementById('previewBtn');
     const previewModal    = document.getElementById('previewModal');
@@ -715,6 +776,17 @@
         if (!meta || !meta.hex_label) continue;
         const cell = windowCells.get(offKey);
         if (cell) paintCtx.fillText(meta.hex_label, cell.cx, cell.cy);
+      }
+
+      // Building indicator — small marker on tiles that have buildings
+      paintCtx.fillStyle = 'rgba(30,41,59,0.9)';
+      for (const [offKey, meta] of hexes) {
+        if (!meta || !meta.buildings || !meta.buildings.length) continue;
+        const cell = windowCells.get(offKey);
+        if (!cell) continue;
+        paintCtx.beginPath();
+        paintCtx.arc(cell.cx, cell.cy - HEX_SIZE * 0.42, 1.7, 0, Math.PI * 2);
+        paintCtx.fill();
       }
     }
 
@@ -1045,9 +1117,76 @@
       const ev = meta.elevation || 0;
       hexElev.value = ev;
       hexElevVal.textContent = ev;
+      bldgMsg.textContent = '';
+      bldgCustomName.value = '';
+      renderBuildingList();
       hexLabelBar.classList.remove('hidden');
       renderEditUi();
     }
+
+    // ── Buildings ────────────────────────────────────────────────────────────
+    function renderBuildingList() {
+      const meta = (selectedOff && currentIsland) ? curHexes().get(selectedOff) : null;
+      const list = (meta && meta.buildings) ? meta.buildings : [];
+      bldgCount.textContent = '(' + list.length + '/' + MAX_BUILDINGS + ')';
+      bldgList.innerHTML = '';
+      list.forEach((b, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'bldg-chip' + (b.type === 'custom' ? ' custom' : '');
+        const lbl = document.createElement('span');
+        lbl.textContent = buildingLabel(b);
+        const x = document.createElement('button');
+        x.className = 'bldg-x';
+        x.textContent = '✕';
+        x.title = 'Remove';
+        x.addEventListener('click', () => removeBuilding(i));
+        chip.appendChild(lbl);
+        chip.appendChild(x);
+        bldgList.appendChild(chip);
+      });
+      bldgAddBtn.disabled = list.length >= MAX_BUILDINGS;
+    }
+
+    function addBuilding() {
+      if (!selectedOff || !currentIsland) return;
+      const meta = curHexes().get(selectedOff);
+      if (!meta) return;
+      const list = meta.buildings || [];
+      if (list.length >= MAX_BUILDINGS) { bldgMsg.textContent = 'Max ' + MAX_BUILDINGS + ' buildings.'; return; }
+      let entry;
+      if (bldgType.value === 'custom') {
+        const n = bldgCustomName.value.trim();
+        if (!n) { bldgMsg.textContent = 'Enter a custom name.'; return; }
+        entry = { type: 'custom', name: n };
+      } else {
+        entry = { type: bldgType.value };
+      }
+      list.push(entry);
+      meta.buildings = list;          // stored sparsely (only present when non-empty)
+      bldgCustomName.value = '';
+      bldgMsg.textContent = '';
+      renderBuildingList();
+      schedulePaintRedraw();
+      scheduleSave();
+    }
+
+    function removeBuilding(i) {
+      if (!selectedOff || !currentIsland) return;
+      const meta = curHexes().get(selectedOff);
+      if (!meta || !meta.buildings) return;
+      meta.buildings.splice(i, 1);
+      if (meta.buildings.length === 0) delete meta.buildings;
+      renderBuildingList();
+      schedulePaintRedraw();
+      scheduleSave();
+    }
+
+    bldgType.addEventListener('change', () => {
+      bldgCustomName.style.display = bldgType.value === 'custom' ? '' : 'none';
+      if (bldgType.value === 'custom') bldgCustomName.focus();
+    });
+    bldgAddBtn.addEventListener('click', addBuilding);
+    bldgCustomName.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBuilding(); });
 
     function hideHexLabelBar() {
       selectedOff = null;
