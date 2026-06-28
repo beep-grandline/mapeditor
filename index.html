@@ -251,6 +251,7 @@
       padding: 2px 4px 2px 9px;
     }
     .bldg-chip.custom { background: #fef3c7; border-color: #fcd34d; }
+    .bldg-chip.npc { background: #dcfce7; border-color: #86efac; }
     .bldg-x {
       font-size: 10px;
       line-height: 1;
@@ -434,6 +435,15 @@
               <input id="bldgCustomName" type="text" placeholder="Custom name" style="display:none;width:160px;">
               <button id="bldgAddBtn">Add Building</button>
               <span id="bldgMsg" class="coord"></span>
+            </div>
+            <div class="hex-panel-row">
+              <span class="row-label">NPCs <span id="npcCount" class="coord"></span></span>
+              <div class="bldg-list" id="npcList"></div>
+            </div>
+            <div class="hex-panel-row">
+              <input id="npcIdInput" type="text" placeholder="NPC id (e.g. nico_robin)" style="width:200px;">
+              <button id="npcAddBtn">Add NPC</button>
+              <span id="npcMsg" class="coord"></span>
             </div>
           </div>
         </div>
@@ -662,6 +672,11 @@
     const bldgCustomName   = document.getElementById('bldgCustomName');
     const bldgAddBtn       = document.getElementById('bldgAddBtn');
     const bldgMsg          = document.getElementById('bldgMsg');
+    const npcList          = document.getElementById('npcList');
+    const npcCount         = document.getElementById('npcCount');
+    const npcIdInput       = document.getElementById('npcIdInput');
+    const npcAddBtn        = document.getElementById('npcAddBtn');
+    const npcMsg           = document.getElementById('npcMsg');
 
     const previewBtn      = document.getElementById('previewBtn');
     const previewModal    = document.getElementById('previewModal');
@@ -790,10 +805,10 @@
         if (cell) paintCtx.fillText(meta.hex_label, cell.cx, cell.cy);
       }
 
-      // Building indicator — small marker on tiles that have buildings
+      // Marker on tiles that have buildings or NPCs
       paintCtx.fillStyle = 'rgba(30,41,59,0.9)';
       for (const [offKey, meta] of hexes) {
-        if (!meta || !meta.buildings || !meta.buildings.length) continue;
+        if (!meta || !((meta.buildings && meta.buildings.length) || (meta.npcs && meta.npcs.length))) continue;
         const cell = windowCells.get(offKey);
         if (!cell) continue;
         paintCtx.beginPath();
@@ -1132,6 +1147,9 @@
       bldgMsg.textContent = '';
       bldgCustomName.value = '';
       renderBuildingList();
+      npcMsg.textContent = '';
+      npcIdInput.value = '';
+      renderNpcList();
       hexLabelBar.classList.remove('hidden');
       renderEditUi();
     }
@@ -1199,6 +1217,59 @@
     });
     bldgAddBtn.addEventListener('click', addBuilding);
     bldgCustomName.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBuilding(); });
+
+    // ── NPCs (free-typed ids) ──────────────────────────────────────────────────
+    function renderNpcList() {
+      const meta = (selectedOff && currentIsland) ? curHexes().get(selectedOff) : null;
+      const list = (meta && meta.npcs) ? meta.npcs : [];
+      npcCount.textContent = list.length ? '(' + list.length + ')' : '';
+      npcList.innerHTML = '';
+      list.forEach((id, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'bldg-chip npc';
+        const lbl = document.createElement('span');
+        lbl.textContent = id;
+        const x = document.createElement('button');
+        x.className = 'bldg-x';
+        x.textContent = '✕';
+        x.title = 'Remove';
+        x.addEventListener('click', () => removeNpc(i));
+        chip.appendChild(lbl);
+        chip.appendChild(x);
+        npcList.appendChild(chip);
+      });
+    }
+
+    function addNpc() {
+      if (!selectedOff || !currentIsland) return;
+      const meta = curHexes().get(selectedOff);
+      if (!meta) return;
+      const id = npcIdInput.value.trim();
+      if (!id) { npcMsg.textContent = 'Enter an NPC id.'; return; }
+      const list = meta.npcs || [];
+      if (list.includes(id)) { npcMsg.textContent = 'Already added.'; return; }
+      list.push(id);
+      meta.npcs = list;               // stored sparsely (only present when non-empty)
+      npcIdInput.value = '';
+      npcMsg.textContent = '';
+      renderNpcList();
+      schedulePaintRedraw();
+      scheduleSave();
+    }
+
+    function removeNpc(i) {
+      if (!selectedOff || !currentIsland) return;
+      const meta = curHexes().get(selectedOff);
+      if (!meta || !meta.npcs) return;
+      meta.npcs.splice(i, 1);
+      if (meta.npcs.length === 0) delete meta.npcs;
+      renderNpcList();
+      schedulePaintRedraw();
+      scheduleSave();
+    }
+
+    npcAddBtn.addEventListener('click', addNpc);
+    npcIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addNpc(); });
 
     function hideHexLabelBar() {
       selectedOff = null;
