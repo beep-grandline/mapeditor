@@ -1225,37 +1225,143 @@
 
     // ── Export / import ──────────────────────────────────────────────────────────
 
+    // Compact format:
+    //   centers : { name -> {q,r} }            quick index for the bot broad-phase
+    //   islands : { name -> {
+    //       origin : {q,r},                     island centre in world coords
+    //       radius : int,                       max hex distance from centre
+    //       hexes  : [[dq,dr], ...],            shape as offsets from origin
+    //       elev   : [int, ...],                dense, parallel to hexes (omitted if all 0)
+    //       meta   : { "dq,dr" -> {...} }        sparse, only tiles with extra metadata
+    //   }}
+    // Elevation is dense so it rides in a parallel array; sparse fields (labels,
+    // future per-tile data) live in `meta` keyed by offset.
     function buildJsonPayload() {
+      const centers = {};
       const islandsObj = {};
-      const tiles = [];
       for (const [name, isl] of islands) {
-        islandsObj[name] = { origin: { q: isl.center.q, r: isl.center.r } };
-        for (const [offKey, meta] of isl.hexes) {
+        centers[name] = { q: isl.center.q, r: isl.center.r };
+
+        const hexes = [];
+        const elev = [];
+        const meta = {};
+        let radius = 0, anyElev = false;
+
+        for (const [offKey, m] of isl.hexes) {
           const [dq, dr] = offKey.split(',').map(Number);
-          tiles.push({
-            q: isl.center.q + dq,
-            r: isl.center.r + dr,
-            hex_type: 'island',
-            island_name: name,
-            ...meta,            // hex_label and any future per-tile metadata
-          });
+          hexes.push([dq, dr]);
+          const e = (m && m.elevation) || 0;
+          elev.push(e);
+          if (e) anyElev = true;
+          radius = Math.max(radius, hexDistance(dq, dr, 0, 0));
+          // Everything except elevation is sparse metadata.
+          const rest = {};
+          if (m) for (const [k, v] of Object.entries(m)) { if (k !== 'elevation') rest[k] = v; }
+          if (Object.keys(rest).length) meta[offKey] = rest;
         }
+
+        const out = { origin: { q: isl.center.q, r: isl.center.r }, radius, hexes };
+        if (anyElev) out.elev = elev;
+        if (Object.keys(meta).length) out.meta = meta;
+        islandsObj[name] = out;
       }
-      tiles.sort((a, b) => (a.q - b.q) || (a.r - b.r));
       return {
-        version: 1,
+        version: 2,
         format: 'island_editor',
         saved_at: new Date().toISOString(),
         edit_radius: EDIT_RADIUS,
+        centers,
         islands: islandsObj,
-        tiles,
       };
+    }
+
+    // Readable but compact: top-level keys indented, but the big per-island
+    // arrays (hexes/elev) and the meta map stay inline so the file doesn't
+    // balloon the way JSON.stringify(…, null, 2) would on nested arrays.
+    function prettyPayload(p) {
+      const L = [];
+      L.push('{');
+      L.push('  "version": ' + p.version + ',');
+      L.push('  "format": ' + JSON.stringify(p.format) + ',');
+      L.push('  "saved_at": ' + JSON.stringify(p.saved_at) + ',');
+      L.push('  "edit_radius": ' + p.edit_radius + ',');
+      L.push('  "centers": ' + JSON.stringify(p.centers) + ',');
+      L.push('  "islands": {');
+      const names = Object.keys(p.islands);
+      names.forEach((name, i) => {
+        const isl = p.islands[name];
+        const parts = [
+          '"origin":' + JSON.stringify(isl.origin),
+          '"radius":' + isl.radius,
+          '"hexes":' + JSON.stringify(isl.hexes),
+        ];
+        if (isl.elev) parts.push('"elev":' + JSON.stringify(isl.elev));
+        if (isl.meta) parts.push('"meta":' + JSON.stringify(isl.meta));
+        L.push('    ' + JSON.stringify(name) + ': { ' + parts.join(', ') + ' }' + (i < names.length - 1 ? ',' : ''));
+      });
+      L.push('  }');
+      L.push('}');
+      return L.join('\n');
+    }
+
+    function finishImport(dropped) {
+      currentIsland = null;
+      selectedOff = null;
+      editorBody.style.display = 'none';
+      editorEmpty.style.display = '';
+      renderIslandList();
+      flushSave();
+      if (dropped > 0) {
+        alert(dropped + ' hex(es) were further than radius ' + EDIT_RADIUS +
+              ' from their island center and were dropped on import.');
+      }
     }
 
     function loadJsonPayload(data) {
       if (!data || typeof data !== 'object') throw new Error('Invalid JSON file.');
-      if (!Array.isArray(data.tiles)) throw new Error('JSON file is missing a tiles array.');
 
+      // New compact format: islands{} entries carry a `hexes` offset array.
+      const looksCompact = data.islands && typeof data.islands === 'object' &&
+        Object.values(data.islands).some(v => v && Array.isArray(v.hexes));
+      if (looksCompact) return loadCompactPayload(data);
+
+      // Legacy compatible format: a flat tiles[] array.
+      if (Array.isArray(data.tiles)) return loadLegacyPayload(data);
+
+      throw new Error('Unrecognized JSON: expected islands{…,hexes:[…]} or a tiles[] array.');
+    }
+
+    function loadCompactPayload(data) {
+      islands.clear();
+      let dropped = 0;
+      for (const [name, isl] of Object.entries(data.islands)) {
+        if (!isl || typeof isl !== 'object') continue;
+        const o = isl.origin || {};
+        const center = { q: Number(o.q) || 0, r: Number(o.r) || 0 };
+        const offs = Array.isArray(isl.hexes) ? isl.hexes : [];
+        const elev = Array.isArray(isl.elev) ? isl.elev : null;
+        const metaMap = (isl.meta && typeof isl.meta === 'object') ? isl.meta : {};
+        const hexes = new Map();
+        offs.forEach((pair, i) => {
+          if (!Array.isArray(pair) || pair.length < 2) return;
+          const dq = Number(pair[0]), dr = Number(pair[1]);
+          if (!Number.isFinite(dq) || !Number.isFinite(dr)) return;
+          if (hexDistance(dq, dr, 0, 0) > EDIT_RADIUS) { dropped++; return; }
+          const m = {};
+          const extra = metaMap[dq + ',' + dr];
+          if (extra && typeof extra === 'object') {
+            for (const [k, v] of Object.entries(extra)) { if (k !== 'elevation') m[k] = v; }
+          }
+          const e = elev ? (Number(elev[i]) || 0) : 0;
+          if (e > 0) m.elevation = Math.max(ELEV_MIN, Math.min(ELEV_MAX, e));
+          hexes.set(key(dq, dr), m);
+        });
+        islands.set(name, { center, hexes });
+      }
+      finishImport(dropped);
+    }
+
+    function loadLegacyPayload(data) {
       // Group tiles by island; only import land (island) tiles with a name.
       const groups = new Map(); // name -> [{q, r, meta}]
       for (const row of data.tiles) {
@@ -1308,17 +1414,7 @@
         if (!islands.has(name)) islands.set(name, { center, hexes: new Map() });
       }
 
-      currentIsland = null;
-      selectedOff = null;
-      editorBody.style.display = 'none';
-      editorEmpty.style.display = '';
-      renderIslandList();
-      flushSave();
-
-      if (dropped > 0) {
-        alert(dropped + ' hex(es) were further than radius ' + EDIT_RADIUS +
-              ' from their island center and were dropped on import.');
-      }
+      finishImport(dropped);
     }
 
     // ── Persistence (localStorage) ───────────────────────────────────────────────
@@ -1377,7 +1473,7 @@
 
     showJsonBtn.addEventListener('click', () => {
       jsonModalTitle.textContent = 'Map JSON';
-      jsonText.value = JSON.stringify(buildJsonPayload(), null, 2);
+      jsonText.value = prettyPayload(buildJsonPayload());
       jsonText.readOnly = false;
       jsonMsg.textContent = '';
       openJsonModal();
