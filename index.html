@@ -139,7 +139,7 @@
       font-style: italic;
       font-size: 14px;
     }
-    .editor-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 auto; }
+    .editor-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 auto; overflow-y: auto; }
 
     .meta-row {
       display: flex;
@@ -166,7 +166,7 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       background: var(--bg);
-      min-height: 200px;
+      min-height: 140px;
       position: relative;
     }
 
@@ -231,6 +231,9 @@
       background: #f8fafc;
       border: 1px solid var(--border);
       border-radius: 9px;
+      flex: 0 0 auto;
+      max-height: 42vh;
+      overflow-y: auto;
     }
     .hex-panel.hidden { display: none; }
     .hex-panel .coord { font-size: 12px; color: var(--muted); }
