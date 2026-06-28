@@ -169,6 +169,26 @@
 
     .hint { font-size: 12px; color: var(--muted); }
 
+    /* ── Tool toggle ── */
+    .tool-bar { display: flex; align-items: center; gap: 6px; }
+    .tool-bar .tool-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+    .tool-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      padding: 5px 12px;
+    }
+    .tool-btn .kbd {
+      font-size: 10px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+    .tool-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .tool-btn.active .kbd { color: #fff; border-color: rgba(255,255,255,.5); }
+
     .hex-label-bar {
       display: flex;
       align-items: center;
@@ -269,12 +289,18 @@
               <input id="centerRInput" class="q-r" type="number" step="1">
             </div>
             <div class="field">
-              <label for="zoomInput">Zoom <span id="zoomLabel">0.5x</span></label>
-              <input id="zoomInput" type="range" min="0.2" max="1.5" step="0.1" value="0.5">
+              <label for="zoomInput">Zoom <span id="zoomLabel">0.8x</span></label>
+              <input id="zoomInput" type="range" min="0.3" max="2.0" step="0.1" value="0.8">
             </div>
             <span class="spacer"></span>
             <span class="stat" id="hexCountStat">0 hexes</span>
             <span class="stat" id="hoverStat">Hover: —</span>
+          </div>
+
+          <div class="tool-bar">
+            <span class="tool-label">Tool</span>
+            <button class="tool-btn active" id="toolDrawBtn">✏️ Draw <span class="kbd">D</span></button>
+            <button class="tool-btn" id="toolSelectBtn">▣ Select <span class="kbd">S</span></button>
           </div>
 
           <div class="board-wrap" id="boardWrap">
@@ -285,7 +311,7 @@
             </div>
           </div>
 
-          <div class="hint">Left click / drag = paint land · Right click / drag = erase · Click a hex to edit its label</div>
+          <div class="hint" id="hintNote">Left click / drag = paint land · Right click / drag = erase</div>
 
           <div class="hex-label-bar hidden" id="hexLabelBar">
             <span class="coord" id="hexCoord"></span>
@@ -322,7 +348,7 @@
     const STEP_Y   = 1.5 * HEX_SIZE;     // vertical row step
     const PAD      = 24;
 
-    const EDIT_RADIUS = 50;              // editing window = radius-50 hexagon
+    const EDIT_RADIUS = 25;             // editing window = radius-25 hexagon (≈50 across)
 
     const HEX_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
 
@@ -342,7 +368,7 @@
     const BORDER_COL  = '#f0f8ff';
     const LABEL_COL   = '#171717';
 
-    const STORAGE_KEY = 'island_editor_v1';
+    const STORAGE_KEY = 'island_editor_v2';
 
     const cssVars      = getComputedStyle(document.documentElement);
     const GRID_COLOR   = cssVars.getPropertyValue('--grid').trim();
@@ -400,6 +426,7 @@
 
     let currentIsland = null;       // name of island being edited
     let selectedOff   = null;       // "dq,dr" of the hex shown in the label bar
+    let toolMode      = 'draw';     // 'draw' | 'select'
 
     let windowCells   = new Map();  // offKey -> { dq, dr, cx, cy, basePath, fillPath, corners }
     let windowBounds  = null;
@@ -432,6 +459,10 @@
     const baseCtx      = baseCanvas.getContext('2d');
     const paintCtx     = paintCanvas.getContext('2d');
     const uiCtx        = uiCanvas.getContext('2d');
+
+    const toolDrawBtn   = document.getElementById('toolDrawBtn');
+    const toolSelectBtn = document.getElementById('toolSelectBtn');
+    const hintNote      = document.getElementById('hintNote');
 
     const hexLabelBar      = document.getElementById('hexLabelBar');
     const hexCoord         = document.getElementById('hexCoord');
@@ -755,7 +786,6 @@
         if (selectedOff === offKey) hideHexLabelBar();
       } else {
         if (!hexes.has(offKey)) hexes.set(offKey, {});
-        selectHex(offKey);
       }
       schedulePaintRedraw();
       renderEditUi();
@@ -764,10 +794,12 @@
       scheduleSave();
     }
 
+    // Input is handled on uiCanvas — the topmost layer in the stack, so it is
+    // the element that actually receives pointer events.
     function mouseToOff(e) {
-      const rect = paintCanvas.getBoundingClientRect();
-      const px = (e.clientX - rect.left) * (paintCanvas.width / rect.width);
-      const py = (e.clientY - rect.top)  * (paintCanvas.height / rect.height);
+      const rect = uiCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (uiCanvas.width / rect.width);
+      const py = (e.clientY - rect.top)  * (uiCanvas.height / rect.height);
       // Convert canvas px back to axial via nearest-centre search (robust, small window)
       let hit = null, best = HEX_SIZE * 1.25;
       for (const [k, cell] of windowCells) {
@@ -777,19 +809,29 @@
       return hit;
     }
 
-    paintCanvas.addEventListener('contextmenu', e => e.preventDefault());
+    uiCanvas.addEventListener('contextmenu', e => e.preventDefault());
 
-    paintCanvas.addEventListener('mousedown', (e) => {
+    uiCanvas.addEventListener('mousedown', (e) => {
       if (!currentIsland) return;
       const off = mouseToOff(e);
       if (!off) return;
+
+      if (toolMode === 'select') {
+        if (e.button !== 0) return;            // left-click selects
+        const hexes = curHexes();
+        if (hexes && hexes.has(off)) selectHex(off);
+        else hideHexLabelBar();                // clicking empty clears selection
+        return;
+      }
+
+      // draw mode
       isMouseDown = true;
       mouseMode = e.button === 2 ? 'erase' : 'paint';
       lastActionOff = '';
       paintOff(off, mouseMode);
     });
 
-    paintCanvas.addEventListener('mousemove', (e) => {
+    uiCanvas.addEventListener('mousemove', (e) => {
       const off = mouseToOff(e);
       const next = off || '';
       if (next !== hoverOff) { hoverOff = next; renderEditUi(); }
@@ -799,10 +841,10 @@
       } else {
         hoverStat.textContent = 'Hover: —';
       }
-      if (isMouseDown && off) paintOff(off, mouseMode);
+      if (toolMode === 'draw' && isMouseDown && off) paintOff(off, mouseMode);
     });
 
-    paintCanvas.addEventListener('mouseleave', () => {
+    uiCanvas.addEventListener('mouseleave', () => {
       if (hoverOff) { hoverOff = ''; hoverStat.textContent = 'Hover: —'; renderEditUi(); }
     });
 
@@ -811,6 +853,30 @@
       isMouseDown = false;
       lastActionOff = '';
       if (saveTimer !== null) { clearTimeout(saveTimer); flushSave(); }
+    });
+
+    // ── Tool mode ────────────────────────────────────────────────────────────
+    function setToolMode(mode) {
+      toolMode = mode;
+      toolDrawBtn.classList.toggle('active', mode === 'draw');
+      toolSelectBtn.classList.toggle('active', mode === 'select');
+      if (mode === 'draw') {
+        uiCanvas.style.cursor = 'crosshair';
+        hintNote.textContent = 'Left click / drag = paint land · Right click / drag = erase';
+        hideHexLabelBar();
+      } else {
+        uiCanvas.style.cursor = 'pointer';
+        hintNote.textContent = 'Click a painted tile to select it and edit it individually';
+      }
+    }
+
+    toolDrawBtn.addEventListener('click', () => setToolMode('draw'));
+    toolSelectBtn.addEventListener('click', () => setToolMode('select'));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'd' || e.key === 'D') setToolMode('draw');
+      if (e.key === 's' || e.key === 'S') setToolMode('select');
     });
 
     // ── Hex label bar ─────────────────────────────────────────────────────────
@@ -1173,6 +1239,7 @@
     });
 
     // ── Boot ───────────────────────────────────────────────────────────────────
+    setToolMode('draw');
     loadState();
   </script>
 </body>
