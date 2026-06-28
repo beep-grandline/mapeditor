@@ -264,6 +264,20 @@
     }
     .bldg-x:hover { background: rgba(0,0,0,.08); color: var(--text); }
 
+    .dlg-section { flex-direction: column; align-items: stretch; gap: 6px; }
+    .dlg-box { display: flex; flex-direction: column; gap: 2px; }
+    .dlg-text {
+      width: 100%;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+    }
+    .dlg-count { align-self: flex-end; font-size: 11px; color: var(--muted); }
+
     /* ── Preview modal ── */
     .modal-backdrop {
       position: fixed;
@@ -444,6 +458,21 @@
               <input id="npcIdInput" type="text" placeholder="NPC id (e.g. nico_robin)" style="width:200px;">
               <button id="npcAddBtn">Add NPC</button>
               <span id="npcMsg" class="coord"></span>
+            </div>
+            <div class="hex-panel-row dlg-section">
+              <span class="row-label">Dialogue (up to 3 boxes, 500 chars each)</span>
+              <div class="dlg-box">
+                <textarea id="dlg0" class="dlg-text" maxlength="500" rows="2" placeholder="Dialogue box 1…"></textarea>
+                <span class="dlg-count" id="dlgCount0">0/500</span>
+              </div>
+              <div class="dlg-box">
+                <textarea id="dlg1" class="dlg-text" maxlength="500" rows="2" placeholder="Dialogue box 2…"></textarea>
+                <span class="dlg-count" id="dlgCount1">0/500</span>
+              </div>
+              <div class="dlg-box">
+                <textarea id="dlg2" class="dlg-text" maxlength="500" rows="2" placeholder="Dialogue box 3…"></textarea>
+                <span class="dlg-count" id="dlgCount2">0/500</span>
+              </div>
             </div>
           </div>
         </div>
@@ -677,6 +706,8 @@
     const npcIdInput       = document.getElementById('npcIdInput');
     const npcAddBtn        = document.getElementById('npcAddBtn');
     const npcMsg           = document.getElementById('npcMsg');
+    const dlgText  = [document.getElementById('dlg0'), document.getElementById('dlg1'), document.getElementById('dlg2')];
+    const dlgCount = [document.getElementById('dlgCount0'), document.getElementById('dlgCount1'), document.getElementById('dlgCount2')];
 
     const previewBtn      = document.getElementById('previewBtn');
     const previewModal    = document.getElementById('previewModal');
@@ -1150,6 +1181,7 @@
       npcMsg.textContent = '';
       npcIdInput.value = '';
       renderNpcList();
+      populateDialogue(meta);
       hexLabelBar.classList.remove('hidden');
       renderEditUi();
     }
@@ -1270,6 +1302,33 @@
 
     npcAddBtn.addEventListener('click', addNpc);
     npcIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addNpc(); });
+
+    // ── Dialogue (up to 3 boxes, 500 chars each) ───────────────────────────────
+    function populateDialogue(meta) {
+      const arr = (meta && meta.dialogue) ? meta.dialogue : [];
+      dlgText.forEach((t, i) => {
+        t.value = arr[i] || '';
+        dlgCount[i].textContent = t.value.length + '/500';
+      });
+    }
+
+    function syncDialogue() {
+      if (!selectedOff || !currentIsland) return;
+      const meta = curHexes().get(selectedOff);
+      if (!meta) return;
+      // Collect non-empty boxes in order; stored sparsely.
+      const arr = [];
+      for (const t of dlgText) { if (t.value.trim()) arr.push(t.value); }
+      if (arr.length) meta.dialogue = arr; else delete meta.dialogue;
+    }
+
+    dlgText.forEach((t, i) => {
+      t.addEventListener('input', () => {
+        dlgCount[i].textContent = t.value.length + '/500';
+        syncDialogue();
+        scheduleSave();
+      });
+    });
 
     function hideHexLabelBar() {
       selectedOff = null;
