@@ -154,6 +154,12 @@
     .meta-row .spacer { flex: 1 1 auto; }
     .stat { font-size: 12px; color: var(--muted); }
 
+    .board-area {
+      flex: 1 1 auto;
+      display: flex;
+      gap: 10px;
+      min-height: 0;
+    }
     .board-wrap {
       flex: 1 1 auto;
       overflow: auto;
@@ -162,6 +168,34 @@
       background: var(--bg);
       min-height: 200px;
       position: relative;
+    }
+
+    /* ── Elevation legend ── */
+    .legend {
+      flex: 0 0 auto;
+      width: 66px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .legend-title { font-size: 11px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .04em; }
+    .legend-body { flex: 1 1 auto; display: flex; gap: 6px; min-height: 120px; }
+    .legend-bar {
+      width: 18px;
+      border-radius: 5px;
+      border: 1px solid rgba(0,0,0,.12);
+    }
+    .legend-ticks {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
     }
     .canvas-stack { position: relative; }
     .canvas-stack canvas { position: absolute; top: 0; left: 0; image-rendering: auto; }
@@ -316,13 +350,26 @@
             <span class="tool-label">Tool</span>
             <button class="tool-btn active" id="toolDrawBtn">✏️ Draw <span class="kbd">D</span></button>
             <button class="tool-btn" id="toolSelectBtn">▣ Select <span class="kbd">S</span></button>
+            <span style="width:14px;"></span>
+            <span class="tool-label">Brush elevation</span>
+            <input id="brushElev" type="range" min="0" max="20" step="1" value="0" style="width:130px;">
+            <span id="brushElevVal" class="tool-label" style="min-width:16px;color:var(--text);">0</span>
           </div>
 
-          <div class="board-wrap" id="boardWrap">
-            <div class="canvas-stack" id="canvasStack">
-              <canvas id="editBaseCanvas"></canvas>
-              <canvas id="editPaintCanvas"></canvas>
-              <canvas id="editUiCanvas"></canvas>
+          <div class="board-area">
+            <div class="board-wrap" id="boardWrap">
+              <div class="canvas-stack" id="canvasStack">
+                <canvas id="editBaseCanvas"></canvas>
+                <canvas id="editPaintCanvas"></canvas>
+                <canvas id="editUiCanvas"></canvas>
+              </div>
+            </div>
+            <div class="legend">
+              <div class="legend-title">Elev</div>
+              <div class="legend-body">
+                <div class="legend-bar" id="legendBar"></div>
+                <div class="legend-ticks" id="legendTicks"></div>
+              </div>
             </div>
           </div>
 
@@ -330,6 +377,10 @@
 
           <div class="hex-label-bar hidden" id="hexLabelBar">
             <span class="coord" id="hexCoord"></span>
+            <label>Elevation
+              <input id="hexElev" type="range" min="0" max="20" step="1" style="width:120px;vertical-align:middle;">
+            </label>
+            <span id="hexElevVal" class="coord" style="min-width:16px;color:var(--text);"></span>
             <input id="hexLabelInput" type="text" placeholder="Hex label (e.g. Royal Palace, Port)…">
             <button id="hexLabelSaveBtn">Save Label</button>
             <button id="hexLabelClearBtn">Clear</button>
@@ -400,6 +451,41 @@
     const SEA_COLOR   = '#75e1ff';
     const BORDER_COL  = '#f0f8ff';
     const LABEL_COL   = '#171717';
+
+    // ── Elevation / topographic ramp ───────────────────────────────────────────
+    const ELEV_MIN = 0, ELEV_MAX = 20;
+    // Control stops (elevation -> colour). Linear-interpolated between stops.
+    const ELEV_STOPS = [
+      [0,  [200, 240, 208]],  // lowland green
+      [4,  [134, 207, 128]],  // green
+      [8,  [216, 215, 107]],  // yellow-green
+      [12, [202, 160, 82]],   // tan
+      [16, [156, 107, 63]],   // brown
+      [20, [247, 247, 247]],  // snow peak
+    ];
+
+    function elevationColor(e) {
+      e = Math.max(ELEV_MIN, Math.min(ELEV_MAX, e || 0));
+      for (let i = 0; i < ELEV_STOPS.length - 1; i++) {
+        const [t0, c0] = ELEV_STOPS[i], [t1, c1] = ELEV_STOPS[i + 1];
+        if (e <= t1) {
+          const f = (e - t0) / (t1 - t0);
+          const r = Math.round(c0[0] + (c1[0] - c0[0]) * f);
+          const g = Math.round(c0[1] + (c1[1] - c0[1]) * f);
+          const b = Math.round(c0[2] + (c1[2] - c0[2]) * f);
+          return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+      }
+      const last = ELEV_STOPS[ELEV_STOPS.length - 1][1];
+      return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
+    }
+
+    // Store elevation sparsely: only keep the key when it is non-zero, so flat
+    // tiles carry no metadata at all (keeps the output light).
+    function setElevation(meta, v) {
+      v = Math.max(ELEV_MIN, Math.min(ELEV_MAX, v || 0));
+      if (v > 0) meta.elevation = v; else delete meta.elevation;
+    }
 
     const STORAGE_KEY = 'island_editor_v2';
 
@@ -496,9 +582,15 @@
     const toolDrawBtn   = document.getElementById('toolDrawBtn');
     const toolSelectBtn = document.getElementById('toolSelectBtn');
     const hintNote      = document.getElementById('hintNote');
+    const brushElev     = document.getElementById('brushElev');
+    const brushElevVal  = document.getElementById('brushElevVal');
+    const legendBar     = document.getElementById('legendBar');
+    const legendTicks   = document.getElementById('legendTicks');
 
     const hexLabelBar      = document.getElementById('hexLabelBar');
     const hexCoord         = document.getElementById('hexCoord');
+    const hexElev          = document.getElementById('hexElev');
+    const hexElevVal       = document.getElementById('hexElevVal');
     const hexLabelInput    = document.getElementById('hexLabelInput');
     const hexLabelSaveBtn  = document.getElementById('hexLabelSaveBtn');
     const hexLabelClearBtn = document.getElementById('hexLabelClearBtn');
@@ -589,11 +681,12 @@
       const hexes = curHexes();
       if (!hexes) return;
 
-      // Fill land
-      paintCtx.fillStyle = ISLAND_FILL;
-      for (const offKey of hexes.keys()) {
+      // Fill land — coloured by elevation (topographic)
+      for (const [offKey, meta] of hexes) {
         const cell = windowCells.get(offKey);
-        if (cell) paintCtx.fill(cell.fillPath);
+        if (!cell) continue;
+        paintCtx.fillStyle = elevationColor(meta && meta.elevation);
+        paintCtx.fill(cell.fillPath);
       }
 
       // Coastline borders — edges that face an empty neighbour
@@ -824,7 +917,9 @@
         hexes.delete(offKey);
         if (selectedOff === offKey) hideHexLabelBar();
       } else {
-        if (!hexes.has(offKey)) hexes.set(offKey, {});
+        const meta = hexes.get(offKey) || {};
+        setElevation(meta, parseInt(brushElev.value, 10) || 0);
+        hexes.set(offKey, meta);
       }
       schedulePaintRedraw();
       renderEditUi();
@@ -912,6 +1007,25 @@
     toolDrawBtn.addEventListener('click', () => setToolMode('draw'));
     toolSelectBtn.addEventListener('click', () => setToolMode('select'));
 
+    brushElev.addEventListener('input', () => {
+      brushElevVal.textContent = brushElev.value;
+      scheduleSave();
+    });
+
+    function buildLegend() {
+      // Gradient strip (bottom = 0, top = 20)
+      const stops = ELEV_STOPS.map(([t, c]) =>
+        'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ') ' + (t / ELEV_MAX * 100) + '%');
+      legendBar.style.background = 'linear-gradient(to top, ' + stops.join(', ') + ')';
+      // Tick labels 20 → 0
+      legendTicks.innerHTML = '';
+      for (const v of [20, 15, 10, 5, 0]) {
+        const d = document.createElement('div');
+        d.textContent = v;
+        legendTicks.appendChild(d);
+      }
+    }
+
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'd' || e.key === 'D') setToolMode('draw');
@@ -929,6 +1043,9 @@
       const absR = isl.center.r + cell.dr;
       hexCoord.textContent = 'offset q=' + cell.dq + ', r=' + cell.dr + '  ·  world q=' + absQ + ', r=' + absR;
       hexLabelInput.value = meta.hex_label || '';
+      const ev = meta.elevation || 0;
+      hexElev.value = ev;
+      hexElevVal.textContent = ev;
       hexLabelBar.classList.remove('hidden');
       renderEditUi();
     }
@@ -954,6 +1071,16 @@
       hexLabelSaveBtn.click();
     });
     hexLabelInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') hexLabelSaveBtn.click(); });
+
+    hexElev.addEventListener('input', () => {
+      hexElevVal.textContent = hexElev.value;
+      if (!selectedOff || !currentIsland) return;
+      const meta = curHexes().get(selectedOff);
+      if (!meta) return;
+      setElevation(meta, parseInt(hexElev.value, 10) || 0);
+      schedulePaintRedraw();
+      scheduleSave();
+    });
 
     // ── Preview (static full-map render) ───────────────────────────────────────
 
@@ -1032,10 +1159,10 @@
       ctx.fillStyle = SEA_COLOR;
       ctx.fillRect(0, 0, w, h);
 
-      // Land fills
-      ctx.fillStyle = ISLAND_FILL;
-      for (const { q, r } of hexes) {
+      // Land fills — coloured by elevation (topographic)
+      for (const { q, r, meta } of hexes) {
         const c = toXY(q, r);
+        ctx.fillStyle = elevationColor(meta && meta.elevation);
         ctx.fill(makeHexPath(c.x, c.y, HEX_SIZE + 0.6));
       }
 
@@ -1211,6 +1338,7 @@
           islands: serializeIslands(),
           currentIsland,
           zoom: zoomInput.value,
+          brushElev: brushElev.value,
         }));
       } catch (e) { /* storage full / disabled — ignore */ }
     }
@@ -1233,6 +1361,7 @@
           }
         }
         if (data.zoom) zoomInput.value = data.zoom;
+        if (data.brushElev != null) { brushElev.value = data.brushElev; brushElevVal.textContent = data.brushElev; }
         renderIslandList();
         if (data.currentIsland && islands.has(data.currentIsland)) selectIsland(data.currentIsland);
         return true;
@@ -1300,6 +1429,7 @@
     });
 
     // ── Boot ───────────────────────────────────────────────────────────────────
+    buildLegend();
     setToolMode('draw');
     loadState();
   </script>
