@@ -299,6 +299,9 @@
       padding: 4px 10px;
       border-radius: 8px;
     }
+    .preview-controls { display: flex; align-items: center; gap: 6px; }
+    .preview-controls button { padding: 4px 10px; border-radius: 8px; line-height: 1; }
+    .preview-controls #previewZoomLabel { font-size: 12px; color: var(--muted); min-width: 38px; text-align: center; }
     .modal-body {
       overflow: auto;
       padding: 12px;
@@ -443,7 +446,12 @@
     <div class="modal">
       <div class="modal-header">
         <h3>Map Preview</h3>
-        <button class="modal-close" id="previewCloseBtn">✕</button>
+        <div class="preview-controls">
+          <button id="previewZoomOut" title="Zoom out">−</button>
+          <span id="previewZoomLabel">2.5×</span>
+          <button id="previewZoomIn" title="Zoom in">+</button>
+          <button class="modal-close" id="previewCloseBtn">✕</button>
+        </div>
       </div>
       <div class="modal-body" id="previewBody">
         <canvas id="previewCanvas"></canvas>
@@ -660,6 +668,10 @@
     const previewBody     = document.getElementById('previewBody');
     const previewCloseBtn = document.getElementById('previewCloseBtn');
     const previewCanvas   = document.getElementById('previewCanvas');
+    const previewZoomIn   = document.getElementById('previewZoomIn');
+    const previewZoomOut  = document.getElementById('previewZoomOut');
+    const previewZoomLabel= document.getElementById('previewZoomLabel');
+    let   previewScale    = 2.5;   // pixels-per-data-unit; constant so big maps stay readable
 
     const showJsonBtn   = document.getElementById('showJsonBtn');
     const pasteJsonBtn  = document.getElementById('pasteJsonBtn');
@@ -1228,6 +1240,14 @@
     }
     function closePreview() { previewModal.classList.add('hidden'); }
 
+    function setPreviewScale(s) {
+      previewScale = Math.max(1, Math.min(8, Math.round(s * 2) / 2));
+      previewZoomLabel.textContent = previewScale + '×';
+      if (!previewModal.classList.contains('hidden')) renderPreview();
+    }
+    previewZoomIn.addEventListener('click', () => setPreviewScale(previewScale + 0.5));
+    previewZoomOut.addEventListener('click', () => setPreviewScale(previewScale - 0.5));
+
     previewBtn.addEventListener('click', openPreview);
     previewCloseBtn.addEventListener('click', closePreview);
     previewModal.addEventListener('click', (e) => { if (e.target === previewModal) closePreview(); });
@@ -1282,14 +1302,20 @@
 
       const w = Math.ceil(maxX - minX);
       const h = Math.ceil(maxY - minY);
-      // Scale to fit the viewport while staying crisp
-      const maxW = Math.min(window.innerWidth * 0.9, 1400);
-      const maxH = Math.min(window.innerHeight * 0.78, 1000);
-      const scale = Math.min(1.4, maxW / w, maxH / h);
 
-      previewCanvas.width = Math.ceil(w * scale);
-      previewCanvas.height = Math.ceil(h * scale);
-      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      // Constant pixels-per-unit: resolution scales WITH the map, so big maps
+      // produce a big scrollable canvas instead of shrinking to fit. Hi-DPI
+      // backing store keeps it crisp; the modal body scrolls.
+      const dpr = window.devicePixelRatio || 1;
+      let scale = previewScale;
+      const MAX_DIM = 16000; // stay within browser canvas limits
+      scale = Math.min(scale, MAX_DIM / (w * dpr), MAX_DIM / (h * dpr));
+
+      previewCanvas.width  = Math.ceil(w * scale * dpr);
+      previewCanvas.height = Math.ceil(h * scale * dpr);
+      previewCanvas.style.width  = Math.ceil(w * scale) + 'px';
+      previewCanvas.style.height = Math.ceil(h * scale) + 'px';
+      ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
 
       const toXY = (q, r) => { const p = axialToPixel(q, r); return { x: p.x - minX, y: p.y - minY }; };
 
