@@ -246,6 +246,22 @@
     }
     #previewCanvas { display: block; border-radius: 8px; }
     .preview-empty { padding: 40px; color: var(--muted); font-style: italic; text-align: center; }
+
+    #jsonText {
+      width: min(80vw, 760px);
+      height: 58vh;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      resize: vertical;
+      white-space: pre;
+      color: var(--text);
+    }
+    .json-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    .json-msg { font-size: 12px; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -254,9 +270,8 @@
       <h2>Island Editor</h2>
       <span class="spacer"></span>
       <button id="previewBtn" class="primary">Preview Map</button>
-      <button id="downloadBtn">Download JSON</button>
-      <button id="uploadBtn">Upload JSON</button>
-      <input id="uploadInput" type="file" accept="application/json,.json" hidden>
+      <button id="showJsonBtn">Show JSON</button>
+      <button id="pasteJsonBtn">Paste JSON</button>
       <button id="clearBtn" class="danger">Clear All</button>
     </div>
 
@@ -333,6 +348,24 @@
       </div>
       <div class="modal-body" id="previewBody">
         <canvas id="previewCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSON modal (Show / Paste) -->
+  <div class="modal-backdrop hidden" id="jsonModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="jsonModalTitle">JSON</h3>
+        <button class="modal-close" id="jsonCloseBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="jsonText" spellcheck="false" placeholder="Paste map JSON here…"></textarea>
+        <div class="json-actions">
+          <button id="jsonCopyBtn" class="primary">Copy to clipboard</button>
+          <button id="jsonLoadBtn">Load this JSON</button>
+          <span class="json-msg" id="jsonMsg"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -476,10 +509,16 @@
     const previewCloseBtn = document.getElementById('previewCloseBtn');
     const previewCanvas   = document.getElementById('previewCanvas');
 
-    const downloadBtn = document.getElementById('downloadBtn');
-    const uploadBtn   = document.getElementById('uploadBtn');
-    const uploadInput = document.getElementById('uploadInput');
-    const clearBtn    = document.getElementById('clearBtn');
+    const showJsonBtn   = document.getElementById('showJsonBtn');
+    const pasteJsonBtn  = document.getElementById('pasteJsonBtn');
+    const jsonModal     = document.getElementById('jsonModal');
+    const jsonModalTitle= document.getElementById('jsonModalTitle');
+    const jsonCloseBtn  = document.getElementById('jsonCloseBtn');
+    const jsonText      = document.getElementById('jsonText');
+    const jsonCopyBtn   = document.getElementById('jsonCopyBtn');
+    const jsonLoadBtn   = document.getElementById('jsonLoadBtn');
+    const jsonMsg       = document.getElementById('jsonMsg');
+    const clearBtn      = document.getElementById('clearBtn');
 
     // ── Editing window (radius-50 hexagon) ─────────────────────────────────────
 
@@ -927,7 +966,7 @@
     previewBtn.addEventListener('click', openPreview);
     previewCloseBtn.addEventListener('click', closePreview);
     previewModal.addEventListener('click', (e) => { if (e.target === previewModal) closePreview(); });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePreview(); closeJsonModal(); } });
 
     function collectWorldHexes() {
       // Returns { set:Set("q,r"), hexes:[{q,r,meta}], labels:[{name,q,r}] }
@@ -1204,28 +1243,50 @@
 
     addIslandBtn.addEventListener('click', addIsland);
 
-    downloadBtn.addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(buildJsonPayload(), null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'islands-' + new Date().toISOString().slice(0,19).replace(/[T:]/g,'-') + '.json';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+    function openJsonModal() { jsonModal.classList.remove('hidden'); }
+    function closeJsonModal() { jsonModal.classList.add('hidden'); }
+
+    showJsonBtn.addEventListener('click', () => {
+      jsonModalTitle.textContent = 'Map JSON';
+      jsonText.value = JSON.stringify(buildJsonPayload(), null, 2);
+      jsonText.readOnly = false;
+      jsonMsg.textContent = '';
+      openJsonModal();
+      requestAnimationFrame(() => { jsonText.focus(); jsonText.select(); });
     });
 
-    uploadBtn.addEventListener('click', () => uploadInput.click());
-    uploadInput.addEventListener('change', async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      try {
-        loadJsonPayload(JSON.parse(await file.text()));
-        uploadBtn.textContent = 'Loaded!';
-        setTimeout(() => { uploadBtn.textContent = 'Upload JSON'; }, 1000);
-      } catch (err) {
-        alert(err && err.message ? err.message : 'Could not read JSON file.');
-      } finally { uploadInput.value = ''; }
+    pasteJsonBtn.addEventListener('click', () => {
+      jsonModalTitle.textContent = 'Paste JSON';
+      jsonText.value = '';
+      jsonText.readOnly = false;
+      jsonMsg.textContent = 'Paste your map JSON below, then “Load this JSON”.';
+      openJsonModal();
+      requestAnimationFrame(() => jsonText.focus());
     });
+
+    jsonCopyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(jsonText.value);
+      } catch (e) {
+        jsonText.select();
+        try { document.execCommand('copy'); } catch (e2) { /* ignore */ }
+      }
+      jsonMsg.textContent = 'Copied to clipboard!';
+      setTimeout(() => { jsonMsg.textContent = ''; }, 1500);
+    });
+
+    jsonLoadBtn.addEventListener('click', () => {
+      try {
+        loadJsonPayload(JSON.parse(jsonText.value));
+        jsonMsg.textContent = 'Loaded!';
+        setTimeout(closeJsonModal, 500);
+      } catch (err) {
+        jsonMsg.textContent = (err && err.message) ? err.message : 'Could not parse JSON.';
+      }
+    });
+
+    jsonCloseBtn.addEventListener('click', closeJsonModal);
+    jsonModal.addEventListener('click', (e) => { if (e.target === jsonModal) closeJsonModal(); });
 
     clearBtn.addEventListener('click', () => {
       if (!confirm('Clear ALL islands? This cannot be undone.')) return;
