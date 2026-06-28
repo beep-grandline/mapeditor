@@ -3,45 +3,68 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Grand Line Map Editor</title>
+  <title>Island Editor</title>
   <style>
     * { box-sizing: border-box; }
 
     :root {
-      --bg: #f8fafc;
+      --bg: #f1f5f9;
       --panel: #ffffff;
       --border: #e2e8f0;
       --text: #0f172a;
       --muted: #64748b;
-      --grid: #94b8d4;
-      --empty: #dbeafe;
-      --calm-belt: #93c5fd;
-      --island: #dcfce7;
-      --redline: #fee2e2;
-      --origin-fill: rgba(254, 243, 199, 0.75);
+      --grid: #cbd5e1;
+      --empty: #eef5fb;
+      --window-bg: #f8fbff;
+      --island: #c4f5d7;
+      --sea: #75e1ff;
+      --hexborder: #f0f8ff;
+      --label: #171717;
+      --origin-fill: rgba(254, 243, 199, 0.85);
       --origin-stroke: #dc2626;
       --hover-stroke: #2563eb;
+      --sel-stroke: #1d4ed8;
+      --accent: #2563eb;
     }
 
     html, body {
       height: 100%;
       margin: 0;
-      overflow: hidden;
       font-family: Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
+      line-height: 1.25;
     }
 
-    body { padding: 16px; line-height: 1.25; overflow: auto; }
+    body { padding: 14px; }
 
     .page {
-      min-height: calc(100vh - 32px);
+      height: calc(100vh - 28px);
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
-    h2 { margin: 0; font-size: 24px; }
+    h2 { margin: 0; font-size: 22px; }
+    h3 { margin: 0 0 8px; font-size: 15px; }
+    h4 { margin: 0 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+    label { font-size: 13px; color: var(--muted); }
+
+    input, select, button {
+      padding: 6px 9px;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+    }
+    button { cursor: pointer; }
+    button:hover { background: #f8fafc; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.primary:hover { background: #1d4ed8; }
+    button.danger { color: #b91c1c; border-color: #fca5a5; }
+    button.danger:hover { background: #fef2f2; }
 
     /* ── Topbar ── */
     .topbar {
@@ -51,673 +74,286 @@
       align-items: center;
       flex: 0 0 auto;
     }
+    .topbar .spacer { flex: 1 1 auto; }
+    .topbar .hint { font-size: 12px; color: var(--muted); }
 
-    label { font-size: 13px; color: var(--muted); }
-
-    input, select, button {
-      padding: 6px 8px;
-      font-size: 14px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--text);
-    }
-
-    button { cursor: pointer; }
-
-    /* Draw-mode fields */
-    .draw-fields {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 8px;
-      border-radius: 9px;
-      border: 1px solid var(--border);
-      background: #f8fafc;
-      transition: opacity .15s, background .15s;
-      position: relative;
-    }
-
-    .draw-fields::before {
-      content: 'Draw';
-      position: absolute;
-      top: -8px; left: 8px;
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--muted);
-      background: #f8fafc;
-      padding: 0 3px;
-      transition: color .15s;
-    }
-
-    .draw-fields.active { border-color: #94a3b8; background: #fff; }
-    .draw-fields.active::before { color: #0f172a; }
-    .draw-fields.inactive { opacity: 0.42; pointer-events: none; }
-
-    /* ── World map section ── */
-    .wrap {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 280px;
-      gap: 16px;
-      align-items: stretch;
-      min-width: 0;
-      height: 60vh;
-    }
-
-    .board-panel {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .tool-bar {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex: 0 0 auto;
-    }
-
-    .tool-bar-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: var(--muted);
-      margin-right: 4px;
-    }
-
-    .tool-btn {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 11px;
-      font-size: 13px;
-      font-weight: 500;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--muted);
-      cursor: pointer;
-      transition: background .1s, color .1s, border-color .1s;
-      user-select: none;
-    }
-
-    .tool-btn:hover { background: #f1f5f9; color: var(--text); }
-    .tool-btn.active { background: #0f172a; color: #fff; border-color: #0f172a; }
-    .tool-btn .kbd { font-size: 10px; opacity: .55; font-family: monospace; }
-
-    .board-wrap {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: #f8fafc;
-      overflow: auto;
-      padding: 10px;
+    /* ── Layout ── */
+    .layout {
       flex: 1 1 auto;
-      min-height: 0;
-      overscroll-behavior: contain;
-      box-shadow: 0 6px 18px rgba(15,23,42,.04);
-    }
-
-    .canvas-stack {
-      position: relative;
-      display: block;
-      width: max-content;
-      height: max-content;
-    }
-
-    canvas {
-      position: absolute;
-      inset: 0;
-      display: block;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-    }
-
-    #baseCanvas { background: var(--empty); }
-    #paintCanvas, #uiCanvas { background: transparent; }
-    #baseCanvas, #uiCanvas { pointer-events: none; }
-
-    .note { font-size: 12px; color: var(--muted); }
-    .status { font-size: 13px; }
-
-    /* ── Sidebar ── */
-    .side {
       display: flex;
-      flex-direction: column;
       gap: 10px;
       min-height: 0;
-      overflow: hidden;
     }
 
-    .card {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 12px;
+    /* ── Island list panel ── */
+    .islands-panel {
+      flex: 0 0 240px;
       background: var(--panel);
-      box-shadow: 0 6px 18px rgba(15,23,42,.04);
-    }
-
-    .card-islands {
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 12px;
       padding: 12px;
-      background: var(--panel);
-      box-shadow: 0 6px 18px rgba(15,23,42,.04);
       display: flex;
       flex-direction: column;
       min-height: 0;
-      overflow: hidden;
-      flex: 1 1 auto;
     }
-
-    .card-islands h3 {
-      margin: 0 0 8px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .04em;
-      flex: 0 0 auto;
-    }
-
-    .island-list {
-      overflow-y: auto;
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
+    .islands-panel .add-btn { width: 100%; margin-bottom: 10px; }
+    .island-list { overflow-y: auto; flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; }
+    .island-empty { font-size: 12px; color: var(--muted); font-style: italic; padding: 6px 2px; }
 
     .island-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 6px;
+      gap: 8px;
+      padding: 7px 8px;
       border-radius: 8px;
       border: 1px solid transparent;
       cursor: pointer;
-      transition: background .1s;
+      font-size: 13px;
     }
-
     .island-row:hover { background: #f1f5f9; }
     .island-row.selected { background: #eff6ff; border-color: #bfdbfe; }
+    .island-dot { width: 12px; height: 12px; border-radius: 3px; background: var(--island); border: 1px solid rgba(0,0,0,.12); flex: 0 0 auto; }
+    .island-name-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .island-count { font-size: 11px; color: var(--muted); background: #f1f5f9; border-radius: 999px; padding: 1px 7px; }
+    .island-del { font-size: 12px; line-height: 1; padding: 2px 6px; border-radius: 6px; color: #b91c1c; border-color: transparent; background: transparent; }
+    .island-del:hover { background: #fef2f2; }
 
-    .island-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      flex: 0 0 auto;
-      border: 1px solid rgba(0,0,0,.1);
-    }
-
-    .island-name-label {
-      flex: 1;
-      font-size: 13px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .island-count { font-size: 11px; color: var(--muted); flex: 0 0 auto; }
-    .island-empty { font-size: 12px; color: var(--muted); font-style: italic; padding: 4px 6px; }
-
-    /* ── Selection card ── */
-    .card-selection {
-      border: 1px solid #fde68a;
-      border-radius: 14px;
-      padding: 12px;
-      background: #fffbeb;
-      box-shadow: 0 6px 18px rgba(15,23,42,.04);
-    }
-
-    .card-selection h3 {
-      margin: 0 0 8px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: #92400e;
-    }
-
-    .sel-field { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-    .sel-field label { font-size: 11px; color: var(--muted); flex: 0 0 60px; }
-    .sel-field input, .sel-field select { flex: 1; font-size: 13px; padding: 3px 7px; border-radius: 7px; border: 1px solid var(--border); background: #fff; }
-    .sel-actions { display: flex; gap: 6px; margin-top: 8px; }
-    .sel-actions button { flex: 1; font-size: 12px; padding: 4px 8px; border-radius: 7px; }
-    .sel-actions .btn-apply { background: #0f172a; color: #fff; border-color: #0f172a; }
-    .sel-actions .btn-erase { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-    .sel-info { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
-
-    /* ── Island Editor ── */
-    .island-editor {
-      border: 1px solid var(--border);
-      border-radius: 14px;
+    /* ── Editor panel ── */
+    .editor-panel {
+      flex: 1 1 auto;
       background: var(--panel);
-      box-shadow: 0 6px 18px rgba(15,23,42,.04);
-      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
     }
-
-    .island-editor-header {
+    .editor-empty {
+      flex: 1 1 auto;
       display: flex;
       align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-style: italic;
+      font-size: 14px;
+    }
+    .editor-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 auto; }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
       gap: 10px;
+    }
+    .field { display: flex; flex-direction: column; gap: 3px; }
+    .field input { padding: 5px 8px; }
+    .field input.q-r { width: 80px; }
+    .field input.name { width: 180px; }
+    .meta-row .spacer { flex: 1 1 auto; }
+    .stat { font-size: 12px; color: var(--muted); }
+
+    .board-wrap {
+      flex: 1 1 auto;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      min-height: 200px;
+      position: relative;
+    }
+    .canvas-stack { position: relative; }
+    .canvas-stack canvas { position: absolute; top: 0; left: 0; image-rendering: auto; }
+    #editBaseCanvas { position: relative; }
+
+    .hint { font-size: 12px; color: var(--muted); }
+
+    .hex-label-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 8px 10px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+    }
+    .hex-label-bar.hidden { display: none; }
+    .hex-label-bar .coord { font-size: 12px; color: var(--muted); }
+    .hex-label-bar input { flex: 1 1 180px; }
+
+    /* ── Preview modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 24px;
+    }
+    .modal-backdrop.hidden { display: none; }
+    .modal {
+      background: var(--panel);
+      border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.35);
+      max-width: 95vw;
+      max-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       padding: 10px 14px;
       border-bottom: 1px solid var(--border);
-      background: #f8fafc;
     }
-
-    .island-editor-header h3 {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 600;
-      flex: 1;
-    }
-
-    .island-editor-header .close-btn {
-      font-size: 13px;
-      padding: 3px 10px;
-      border-radius: 7px;
-      color: var(--muted);
-    }
-
-    .island-editor-body {
-      display: grid;
-      grid-template-columns: 1fr 260px;
-      height: 280px;
-    }
-
-    .island-canvas-wrap {
-      overflow: auto;
-      padding: 10px;
-      background: var(--empty);
-      border-right: 1px solid var(--border);
-      position: relative;
-    }
-
-    .island-canvas-stack {
-      position: relative;
-      display: block;
-      width: max-content;
-      height: max-content;
-    }
-
-    #islandBaseCanvas { background: transparent; }
-    #islandUiCanvas { background: transparent; pointer-events: none; }
-
-    .island-pane {
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      overflow-y: auto;
-    }
-
-    .island-pane h4 {
-      margin: 0 0 2px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: var(--muted);
-    }
-
-    .island-pane .pane-section { display: flex; flex-direction: column; gap: 6px; }
-
-    .island-pane input {
-      font-size: 13px;
-      padding: 4px 8px;
-      border-radius: 7px;
-      border: 1px solid var(--border);
-      width: 100%;
-    }
-
-    .hex-wheel {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-      user-select: none;
-    }
-
-    .hex-wheel-row {
-      display: flex;
-      gap: 3px;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .wheel-btn {
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: #fff;
+    .modal-header h3 { margin: 0; }
+    .modal-close {
       font-size: 16px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      transition: background .1s, transform .08s;
       line-height: 1;
-    }
-
-    .wheel-btn:hover { background: #f1f5f9; }
-    .wheel-btn:active { background: #e2e8f0; transform: scale(.93); }
-
-    .wheel-center {
-      width: 34px;
-      height: 34px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      color: var(--muted);
-      opacity: .4;
-    }
-
-    .pane-empty { font-size: 12px; color: var(--muted); font-style: italic; }
-
-    .hex-info-box {
-      background: #f8fafc;
-      border: 1px solid var(--border);
+      padding: 4px 10px;
       border-radius: 8px;
-      padding: 8px 10px;
-      font-size: 12px;
-      color: var(--muted);
     }
+    .modal-body {
+      overflow: auto;
+      padding: 12px;
+      background: var(--bg);
+    }
+    #previewCanvas { display: block; border-radius: 8px; }
+    .preview-empty { padding: 40px; color: var(--muted); font-style: italic; text-align: center; }
   </style>
 </head>
 <body>
   <div class="page">
-    <h2>Grand Line Map Editor</h2>
-
     <div class="topbar">
-      <div id="drawFields" class="draw-fields">
-        <label>Island Name <input id="islandInput" value="island_01"></label>
-        <label>
-          Hex Type
-          <select id="typeInput">
-            <option value="island" selected>island</option>
-            <option value="redline">redline</option>
-          </select>
-        </label>
-      </div>
-      <label>Zoom <input id="zoomInput" type="range" min="0.4" max="2.0" step="0.1" value="0.8"></label>
-      <span id="zoomLabel">0.8x</span>
+      <h2>Island Editor</h2>
+      <span class="spacer"></span>
+      <button id="previewBtn" class="primary">Preview Map</button>
       <button id="downloadBtn">Download JSON</button>
       <button id="uploadBtn">Upload JSON</button>
       <input id="uploadInput" type="file" accept="application/json,.json" hidden>
-      <button id="clearBtn">Clear Painted</button>
-      <button id="resetBtn">Reset View</button>
-      <span id="paintedCount">Painted: 0</span>
+      <button id="clearBtn" class="danger">Clear All</button>
     </div>
 
-    <!-- World map -->
-    <div class="wrap">
-      <div class="board-panel">
-        <div class="tool-bar">
-          <span class="tool-bar-label">Tool</span>
-          <button class="tool-btn active" id="toolDrawBtn">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z"/></svg>
-            Draw <span class="kbd">D</span>
-          </button>
-          <button class="tool-btn" id="toolSelectBtn">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2" stroke-dasharray="3 2"/></svg>
-            Select <span class="kbd">S</span>
-          </button>
+    <div class="layout">
+      <!-- Island list -->
+      <aside class="islands-panel">
+        <h3>Islands</h3>
+        <button id="addIslandBtn" class="add-btn primary">+ New Island</button>
+        <div class="island-list" id="islandList">
+          <div class="island-empty">No islands yet.</div>
         </div>
-        <div class="board-wrap" id="boardWrap">
-          <div class="canvas-stack" id="canvasStack">
-            <canvas id="baseCanvas"></canvas>
-            <canvas id="paintCanvas"></canvas>
-            <canvas id="uiCanvas"></canvas>
-          </div>
-        </div>
-        <div class="note" id="hintNote" style="margin-top:4px;">
-          Left click / drag = paint · Right click / drag = erase
-        </div>
-      </div>
+      </aside>
 
-      <div class="side">
-        <div class="card">
-          <div class="status" id="hoverStatus">Hover: —</div>
-          <div class="status" id="paintStatus">Paint: island / island_01</div>
-        </div>
+      <!-- Editor -->
+      <main class="editor-panel">
+        <div class="editor-empty" id="editorEmpty">Select or create an island to edit.</div>
 
-        <div class="card-selection" id="selectionCard" style="display:none;">
-          <h3>Selection</h3>
-          <div class="sel-info" id="selInfo">0 hexes selected</div>
-          <div class="sel-field">
-            <label>Name</label>
-            <input id="selNameInput" type="text" placeholder="(mixed)">
-          </div>
-          <div class="sel-field">
-            <label>Type</label>
-            <select id="selTypeInput">
-              <option value="">(keep)</option>
-              <option value="island">island</option>
-              <option value="redline">redline</option>
-            </select>
-          </div>
-          <div class="sel-actions">
-            <button class="btn-apply" id="selApplyBtn">Apply</button>
-            <button class="btn-erase" id="selEraseBtn">Erase</button>
-          </div>
-        </div>
-
-        <div class="card-islands">
-          <h3>Islands</h3>
-          <div class="island-list" id="islandList">
-            <div class="island-empty">No islands painted yet.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Island editor — hidden until an island is opened -->
-    <div class="island-editor" id="islandEditor" style="display:none;">
-      <div class="island-editor-header">
-        <h3 id="islandEditorTitle">Island Editor</h3>
-        <button class="close-btn" id="islandEditorCloseBtn">✕ Close</button>
-      </div>
-      <div class="island-editor-body">
-        <div class="island-canvas-wrap" id="islandCanvasWrap">
-          <div class="island-canvas-stack" id="islandCanvasStack">
-            <canvas id="islandBaseCanvas"></canvas>
-            <canvas id="islandUiCanvas"></canvas>
-          </div>
-        </div>
-        <div class="island-pane" id="islandPane">
-          <div class="pane-empty" id="islandPaneEmpty">Click a hex to edit it.</div>
-
-          <div id="islandHexSection" style="display:none;" class="pane-section">
-            <h4>Hex Label</h4>
-            <div class="hex-info-box" id="islandHexCoords"></div>
-            <input id="hexLabelInput" type="text" placeholder="e.g. Royal Palace, Port, Mountain Peak…">
-            <button id="hexLabelSaveBtn" style="font-size:12px;padding:4px 10px;border-radius:7px;align-self:flex-start;">Save Label</button>
+        <div class="editor-body" id="editorBody" style="display:none;">
+          <div class="meta-row">
+            <div class="field">
+              <label for="nameInput">Island name</label>
+              <input id="nameInput" class="name" type="text">
+            </div>
+            <div class="field">
+              <label for="centerQInput">Center q</label>
+              <input id="centerQInput" class="q-r" type="number" step="1">
+            </div>
+            <div class="field">
+              <label for="centerRInput">Center r</label>
+              <input id="centerRInput" class="q-r" type="number" step="1">
+            </div>
+            <div class="field">
+              <label for="zoomInput">Zoom <span id="zoomLabel">0.5x</span></label>
+              <input id="zoomInput" type="range" min="0.2" max="1.5" step="0.1" value="0.5">
+            </div>
+            <span class="spacer"></span>
+            <span class="stat" id="hexCountStat">0 hexes</span>
+            <span class="stat" id="hoverStat">Hover: —</span>
           </div>
 
-          <div class="pane-section">
-            <h4>Shift Island</h4>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Move all hexes of this island one step at a time.</div>
-            <div class="hex-wheel">
-              <div class="hex-wheel-row">
-                <button class="wheel-btn" data-dq="-1" data-dr="1"  title="NW">↖</button>
-                <button class="wheel-btn" data-dq="0"  data-dr="1"  title="NE">↗</button>
-              </div>
-              <div class="hex-wheel-row">
-                <button class="wheel-btn" data-dq="-1" data-dr="0"  title="W">←</button>
-                <div class="wheel-center">⬡</div>
-                <button class="wheel-btn" data-dq="1"  data-dr="0"  title="E">→</button>
-              </div>
-              <div class="hex-wheel-row">
-                <button class="wheel-btn" data-dq="0"  data-dr="-1" title="SW">↙</button>
-                <button class="wheel-btn" data-dq="1"  data-dr="-1" title="SE">↘</button>
-              </div>
+          <div class="board-wrap" id="boardWrap">
+            <div class="canvas-stack" id="canvasStack">
+              <canvas id="editBaseCanvas"></canvas>
+              <canvas id="editPaintCanvas"></canvas>
+              <canvas id="editUiCanvas"></canvas>
             </div>
           </div>
+
+          <div class="hint">Left click / drag = paint land · Right click / drag = erase · Click a hex to edit its label</div>
+
+          <div class="hex-label-bar hidden" id="hexLabelBar">
+            <span class="coord" id="hexCoord"></span>
+            <input id="hexLabelInput" type="text" placeholder="Hex label (e.g. Royal Palace, Port)…">
+            <button id="hexLabelSaveBtn">Save Label</button>
+            <button id="hexLabelClearBtn">Clear</button>
+          </div>
         </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Preview modal -->
+  <div class="modal-backdrop hidden" id="previewModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Map Preview</h3>
+        <button class="modal-close" id="previewCloseBtn">✕</button>
+      </div>
+      <div class="modal-body" id="previewBody">
+        <canvas id="previewCanvas"></canvas>
       </div>
     </div>
   </div>
 
   <script>
-    // ── World constants ───────────────────────────────────────────────────────
+    // ── Hex geometry (inherited from the Grand Line map editor) ────────────────
+    // Pointy-top axial hexes. Internal editor convention: y grows upward with -r.
 
-    const WORLD_Q_MIN = 0, WORLD_Q_MAX = 532;
-    const WORLD_R_MIN = 0, WORLD_R_MAX = 79;
-    const DISPLAY_Q_OFFSET = 15, DISPLAY_R_OFFSET = 42;
+    const HEX_SIZE = 10;
+    const SQRT3    = Math.sqrt(3);
+    const HEX_W    = SQRT3 * HEX_SIZE;   // hex width  (flat-to-flat)
+    const HEX_H    = 2 * HEX_SIZE;       // hex height (point-to-point)
+    const STEP_Y   = 1.5 * HEX_SIZE;     // vertical row step
+    const PAD      = 24;
 
-    const Q_MIN = WORLD_Q_MIN - DISPLAY_Q_OFFSET;
-    const R_MIN = WORLD_R_MIN - DISPLAY_R_OFFSET;
-    const R_MAX = WORLD_R_MAX - DISPLAY_R_OFFSET;
-
-    const HEX_SIZE  = 10;
-    const SQRT3     = Math.sqrt(3);
-    const HEX_W     = SQRT3 * HEX_SIZE;
-    const HEX_H     = 2 * HEX_SIZE;
-    const STEP_Y    = 1.5 * HEX_SIZE;
-    const PAD       = 20;
-    const ISLE_PAD  = 24; // padding around island editor canvas
-
-    const CALM_BELT_DEPTH    = 2;
-    const CALM_BELT_R_TOP    = R_MIN + CALM_BELT_DEPTH - 1;
-    const CALM_BELT_R_BOTTOM = R_MAX - CALM_BELT_DEPTH + 1;
+    const EDIT_RADIUS = 50;              // editing window = radius-50 hexagon
 
     const HEX_DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
 
-    const TILE_COLORS = {
-      island:  '#dcfce7',
-      redline: '#fee2e2'
+    // Which corner pair (edge) faces each neighbour direction, for coastline
+    // borders. Derived for the x=HEX_W*(q+r/2), y=STEP_Y*(-r) layout.
+    const NEIGHBOR_TO_EDGE = {
+      '1,0':  [0, 1],
+      '1,-1': [1, 2],
+      '0,-1': [2, 3],
+      '-1,0': [3, 4],
+      '-1,1': [4, 5],
+      '0,1':  [5, 0],
     };
 
-    const STORAGE_KEY = 'grand_line_map_editor_v3';
+    const ISLAND_FILL = '#c4f5d7';
+    const SEA_COLOR   = '#75e1ff';
+    const BORDER_COL  = '#f0f8ff';
+    const LABEL_COL   = '#171717';
 
-    const cssVars       = getComputedStyle(document.documentElement);
-    const GRID_COLOR    = cssVars.getPropertyValue('--grid').trim();
-    const EMPTY_COLOR   = cssVars.getPropertyValue('--empty').trim();
-    const CALM_COLOR    = cssVars.getPropertyValue('--calm-belt').trim();
-    const ORIGIN_FILL   = cssVars.getPropertyValue('--origin-fill').trim();
-    const ORIGIN_STROKE = cssVars.getPropertyValue('--origin-stroke').trim();
-    const HOVER_STROKE  = cssVars.getPropertyValue('--hover-stroke').trim();
+    const STORAGE_KEY = 'island_editor_v1';
 
-    // ── DOM refs ──────────────────────────────────────────────────────────────
+    const cssVars      = getComputedStyle(document.documentElement);
+    const GRID_COLOR   = cssVars.getPropertyValue('--grid').trim();
+    const WINDOW_BG    = cssVars.getPropertyValue('--window-bg').trim();
+    const ORIGIN_FILL  = cssVars.getPropertyValue('--origin-fill').trim();
+    const ORIGIN_STROKE= cssVars.getPropertyValue('--origin-stroke').trim();
+    const HOVER_STROKE = cssVars.getPropertyValue('--hover-stroke').trim();
+    const SEL_STROKE   = cssVars.getPropertyValue('--sel-stroke').trim();
 
-    const boardWrap    = document.getElementById('boardWrap');
-    const canvasStack  = document.getElementById('canvasStack');
-    const baseCanvas   = document.getElementById('baseCanvas');
-    const paintCanvas  = document.getElementById('paintCanvas');
-    const uiCanvas     = document.getElementById('uiCanvas');
-    const baseCtx      = baseCanvas.getContext('2d');
-    const paintCtx     = paintCanvas.getContext('2d');
-    const uiCtx        = uiCanvas.getContext('2d');
-
-    const islandInput  = document.getElementById('islandInput');
-    const typeInput    = document.getElementById('typeInput');
-    const drawFields   = document.getElementById('drawFields');
-    const zoomInput    = document.getElementById('zoomInput');
-    const zoomLabel    = document.getElementById('zoomLabel');
-    const downloadBtn  = document.getElementById('downloadBtn');
-    const uploadBtn    = document.getElementById('uploadBtn');
-    const uploadInput  = document.getElementById('uploadInput');
-    const clearBtn     = document.getElementById('clearBtn');
-    const resetBtn     = document.getElementById('resetBtn');
-    const paintedCount = document.getElementById('paintedCount');
-    const hoverStatus  = document.getElementById('hoverStatus');
-    const paintStatus  = document.getElementById('paintStatus');
-    const hintNote     = document.getElementById('hintNote');
-
-    const toolDrawBtn   = document.getElementById('toolDrawBtn');
-    const toolSelectBtn = document.getElementById('toolSelectBtn');
-    const selectionCard = document.getElementById('selectionCard');
-    const selInfo       = document.getElementById('selInfo');
-    const selNameInput  = document.getElementById('selNameInput');
-    const selTypeInput  = document.getElementById('selTypeInput');
-    const selApplyBtn   = document.getElementById('selApplyBtn');
-    const selEraseBtn   = document.getElementById('selEraseBtn');
-    const islandListEl  = document.getElementById('islandList');
-
-    const islandEditor       = document.getElementById('islandEditor');
-    const islandEditorTitle  = document.getElementById('islandEditorTitle');
-    const islandEditorCloseBtn = document.getElementById('islandEditorCloseBtn');
-    const islandCanvasWrap   = document.getElementById('islandCanvasWrap');
-    const islandCanvasStack  = document.getElementById('islandCanvasStack');
-    const islandBaseCanvas   = document.getElementById('islandBaseCanvas');
-    const islandUiCanvas     = document.getElementById('islandUiCanvas');
-    const islandBaseCtx      = islandBaseCanvas.getContext('2d');
-    const islandUiCtx        = islandUiCanvas.getContext('2d');
-    const islandPane         = document.getElementById('islandPane');
-    const islandPaneEmpty    = document.getElementById('islandPaneEmpty');
-    const islandHexSection   = document.getElementById('islandHexSection');
-    const islandHexCoords    = document.getElementById('islandHexCoords');
-    const hexLabelInput      = document.getElementById('hexLabelInput');
-    const hexLabelSaveBtn    = document.getElementById('hexLabelSaveBtn');
-
-    // ── State ─────────────────────────────────────────────────────────────────
-
-    // tiles: key -> { hex_type, island_name, hex_label? }
-    const tiles = new Map();
-    // cells: key -> { q, r, cx, cy, basePath, fillPath }
-    const cells = new Map();
-    // islands: name -> { origin: {q,r} | null }
-    const islands = new Map();
-
-    let bounds        = null;
-    let isMouseDown   = false;
-    let mouseMode     = 'paint';
-    let lastActionKey = '';
-    let saveTimer     = null;
-    let paintRafId    = null;
-    let hoverKey      = '';
-    let toolMode      = 'draw';
-
-    // Select mode
-    let selectedHexKeys  = new Set();
-    let isMarqueeActive  = false;
-    let marqueeStart     = null;
-    let marqueeEnd       = null;
-
-    // Island editor
-    let openIslandName   = null; // which island is open in the editor
-    let islandCells      = new Map(); // key -> { q, r, cx, cy, basePath, fillPath } in island-canvas space
-    let selectedIslandHexKey = null; // currently clicked hex in island editor
-    let selectedIslandName = null;   // highlighted row in island list
-
-    // ── Utilities ─────────────────────────────────────────────────────────────
-
-    function key(q, r) { return q + ',' + r; }
-
-    function setPaintStatus() {
-      paintStatus.textContent = 'Paint: ' + (typeInput.value || '(blank)') + ' / ' + (islandInput.value || '(blank)');
-      paintedCount.textContent = 'Painted: ' + tiles.size;
-    }
-
-    function displayToWorld(q, r) { return { q: q + DISPLAY_Q_OFFSET, r: r + DISPLAY_R_OFFSET }; }
-    function worldToDisplay(q, r) { return { q: q - DISPLAY_Q_OFFSET, r: r - DISPLAY_R_OFFSET }; }
-    function rowQMin(r) { return Math.floor(Q_MIN - r / 2); }
-    function rowQMax(r) { return rowQMin(r) + (WORLD_Q_MAX - WORLD_Q_MIN); }
-    function inBounds(q, r) { return r >= R_MIN && r <= R_MAX && q >= rowQMin(r) && q <= rowQMax(r); }
-    function isCalmBelt(r) { return r <= CALM_BELT_R_TOP || r >= CALM_BELT_R_BOTTOM; }
-
-    function axialToPixelWorld(q, r) {
+    function axialToPixel(q, r) {
       return { x: HEX_W * (q + r / 2), y: STEP_Y * (-r) };
-    }
-
-    function axialToPixelDisplay(q, r) {
-      const w = displayToWorld(q, r);
-      return axialToPixelWorld(w.q, w.r);
-    }
-
-    function pixelToAxialWorld(x, y) {
-      return cubeRound((SQRT3 * x / 3 + y / 3) / HEX_SIZE, (-2 * y / 3) / HEX_SIZE);
-    }
-
-    function pixelToAxialDisplay(x, y) {
-      const w = pixelToAxialWorld(x, y);
-      return worldToDisplay(w.q, w.r);
     }
 
     function cubeRound(q, r) {
@@ -730,202 +366,259 @@
       return { q: rx, r: rz };
     }
 
-    function makeHexPath(cx, cy, radius) {
-      const p = new Path2D();
+    function hexDistance(q1, r1, q2, r2) {
+      return Math.max(Math.abs(q1-q2), Math.abs(r1-r2), Math.abs((q1+r1)-(q2+r2)));
+    }
+
+    function hexCorners(cx, cy, radius) {
+      const pts = [];
       for (let i = 0; i < 6; i++) {
         const a = (Math.PI / 180) * (60 * i - 30);
-        const x = cx + radius * Math.cos(a), y = cy + radius * Math.sin(a);
-        if (i === 0) p.moveTo(x, y); else p.lineTo(x, y);
+        pts.push([cx + radius * Math.cos(a), cy + radius * Math.sin(a)]);
+      }
+      return pts;
+    }
+
+    function makeHexPath(cx, cy, radius) {
+      const p = new Path2D();
+      const c = hexCorners(cx, cy, radius);
+      for (let i = 0; i < 6; i++) {
+        if (i === 0) p.moveTo(c[i][0], c[i][1]);
+        else p.lineTo(c[i][0], c[i][1]);
       }
       p.closePath();
       return p;
     }
 
-    function tileColor(tile) {
-      return TILE_COLORS[String(tile.hex_type || '').toLowerCase()] || TILE_COLORS.island;
-    }
+    function key(q, r) { return q + ',' + r; }
 
-    // ── World cell cache ──────────────────────────────────────────────────────
+    // ── State ──────────────────────────────────────────────────────────────────
+    // islands: name -> { center: {q, r}, hexes: Map<offKey, meta> }
+    //   offKey is "dq,dr" relative to center; meta is an object that may carry
+    //   hex_label and arbitrary future per-tile metadata (elevation, buildings…).
+    const islands = new Map();
 
-    function computeBounds() {
+    let currentIsland = null;       // name of island being edited
+    let selectedOff   = null;       // "dq,dr" of the hex shown in the label bar
+
+    let windowCells   = new Map();  // offKey -> { dq, dr, cx, cy, basePath, fillPath, corners }
+    let windowBounds  = null;
+
+    let isMouseDown   = false;
+    let mouseMode     = 'paint';
+    let hoverOff      = '';
+    let lastActionOff = '';
+    let saveTimer     = null;
+    let paintRafId    = null;
+
+    // ── DOM refs ─────────────────────────────────────────────────────────────
+    const islandListEl = document.getElementById('islandList');
+    const addIslandBtn = document.getElementById('addIslandBtn');
+    const editorEmpty  = document.getElementById('editorEmpty');
+    const editorBody   = document.getElementById('editorBody');
+    const nameInput    = document.getElementById('nameInput');
+    const centerQInput = document.getElementById('centerQInput');
+    const centerRInput = document.getElementById('centerRInput');
+    const zoomInput    = document.getElementById('zoomInput');
+    const zoomLabel    = document.getElementById('zoomLabel');
+    const hexCountStat = document.getElementById('hexCountStat');
+    const hoverStat    = document.getElementById('hoverStat');
+
+    const boardWrap    = document.getElementById('boardWrap');
+    const canvasStack  = document.getElementById('canvasStack');
+    const baseCanvas   = document.getElementById('editBaseCanvas');
+    const paintCanvas  = document.getElementById('editPaintCanvas');
+    const uiCanvas     = document.getElementById('editUiCanvas');
+    const baseCtx      = baseCanvas.getContext('2d');
+    const paintCtx     = paintCanvas.getContext('2d');
+    const uiCtx        = uiCanvas.getContext('2d');
+
+    const hexLabelBar      = document.getElementById('hexLabelBar');
+    const hexCoord         = document.getElementById('hexCoord');
+    const hexLabelInput    = document.getElementById('hexLabelInput');
+    const hexLabelSaveBtn  = document.getElementById('hexLabelSaveBtn');
+    const hexLabelClearBtn = document.getElementById('hexLabelClearBtn');
+
+    const previewBtn      = document.getElementById('previewBtn');
+    const previewModal    = document.getElementById('previewModal');
+    const previewBody     = document.getElementById('previewBody');
+    const previewCloseBtn = document.getElementById('previewCloseBtn');
+    const previewCanvas   = document.getElementById('previewCanvas');
+
+    const downloadBtn = document.getElementById('downloadBtn');
+    const uploadBtn   = document.getElementById('uploadBtn');
+    const uploadInput = document.getElementById('uploadInput');
+    const clearBtn    = document.getElementById('clearBtn');
+
+    // ── Editing window (radius-50 hexagon) ─────────────────────────────────────
+
+    function buildWindowCells() {
+      if (windowCells.size > 0) return; // window geometry is identical for all islands
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (let r = R_MIN; r <= R_MAX; r++) {
-        const L = axialToPixelDisplay(rowQMin(r), r);
-        const R = axialToPixelDisplay(rowQMax(r), r);
-        if (L.x - HEX_W/2 < minX) minX = L.x - HEX_W/2;
-        if (R.x + HEX_W/2 > maxX) maxX = R.x + HEX_W/2;
-        if (L.y - HEX_H/2 < minY) minY = L.y - HEX_H/2;
-        if (L.y + HEX_H/2 > maxY) maxY = L.y + HEX_H/2;
+      for (let dq = -EDIT_RADIUS; dq <= EDIT_RADIUS; dq++) {
+        for (let dr = -EDIT_RADIUS; dr <= EDIT_RADIUS; dr++) {
+          if (hexDistance(dq, dr, 0, 0) > EDIT_RADIUS) continue;
+          const p = axialToPixel(dq, dr);
+          if (p.x - HEX_W/2 < minX) minX = p.x - HEX_W/2;
+          if (p.x + HEX_W/2 > maxX) maxX = p.x + HEX_W/2;
+          if (p.y - HEX_H/2 < minY) minY = p.y - HEX_H/2;
+          if (p.y + HEX_H/2 > maxY) maxY = p.y + HEX_H/2;
+        }
       }
-      return { minX, maxX, minY, maxY };
-    }
-
-    function displayToCanvas(q, r) {
-      const p = axialToPixelDisplay(q, r);
-      return { x: p.x - bounds.minX + PAD, y: p.y - bounds.minY + PAD };
-    }
-
-    function buildCellCache() {
-      cells.clear();
-      bounds = computeBounds();
-      const w = Math.ceil(bounds.maxX - bounds.minX + PAD * 2);
-      const h = Math.ceil(bounds.maxY - bounds.minY + PAD * 2);
-      for (const c of [baseCanvas, paintCanvas, uiCanvas]) { c.width = w; c.height = h; }
-      canvasStack.style.width = w + 'px';
-      canvasStack.style.height = h + 'px';
-
-      for (let r = R_MIN; r <= R_MAX; r++) {
-        for (let q = rowQMin(r); q <= rowQMax(r); q++) {
-          const p = displayToCanvas(q, r);
-          cells.set(key(q, r), {
-            q, r, cx: p.x, cy: p.y,
-            basePath: makeHexPath(p.x, p.y, HEX_SIZE),
-            fillPath: makeHexPath(p.x, p.y, HEX_SIZE + 1)
+      windowBounds = { minX, maxX, minY, maxY };
+      for (let dq = -EDIT_RADIUS; dq <= EDIT_RADIUS; dq++) {
+        for (let dr = -EDIT_RADIUS; dr <= EDIT_RADIUS; dr++) {
+          if (hexDistance(dq, dr, 0, 0) > EDIT_RADIUS) continue;
+          const p = axialToPixel(dq, dr);
+          const cx = p.x - minX + PAD;
+          const cy = p.y - minY + PAD;
+          windowCells.set(key(dq, dr), {
+            dq, dr, cx, cy,
+            basePath: makeHexPath(cx, cy, HEX_SIZE),
+            fillPath: makeHexPath(cx, cy, HEX_SIZE + 0.6),
+            corners:  hexCorners(cx, cy, HEX_SIZE),
           });
         }
       }
+      const w = Math.ceil(windowBounds.maxX - windowBounds.minX + PAD * 2);
+      const h = Math.ceil(windowBounds.maxY - windowBounds.minY + PAD * 2);
+      for (const c of [baseCanvas, paintCanvas, uiCanvas]) { c.width = w; c.height = h; }
+      canvasStack.style.width = w + 'px';
+      canvasStack.style.height = h + 'px';
     }
 
-    // ── World rendering ───────────────────────────────────────────────────────
+    function applyZoom() {
+      const zoom = Number(zoomInput.value);
+      zoomLabel.textContent = zoom.toFixed(1) + 'x';
+      const w = baseCanvas.width * zoom + 'px';
+      const h = baseCanvas.height * zoom + 'px';
+      canvasStack.style.width = w; canvasStack.style.height = h;
+      for (const c of [baseCanvas, paintCanvas, uiCanvas]) { c.style.width = w; c.style.height = h; }
+    }
 
-    function renderBase() {
+    // ── Editing window rendering ───────────────────────────────────────────────
+
+    function renderEditBase() {
       baseCtx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
-      baseCtx.fillStyle = EMPTY_COLOR;
-      baseCtx.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
-      baseCtx.fillStyle = CALM_COLOR;
-      for (const cell of cells.values()) {
-        if (isCalmBelt(cell.r)) baseCtx.fill(cell.fillPath);
-      }
-      baseCtx.lineWidth = 0.7;
+      // Paintable hexagon background
+      baseCtx.fillStyle = WINDOW_BG;
+      for (const cell of windowCells.values()) baseCtx.fill(cell.fillPath);
+      // Grid
+      baseCtx.lineWidth = 0.6;
       baseCtx.strokeStyle = GRID_COLOR;
-      for (const cell of cells.values()) baseCtx.stroke(cell.basePath);
+      for (const cell of windowCells.values()) baseCtx.stroke(cell.basePath);
     }
 
-    function renderUi() {
+    function curHexes() {
+      const isl = islands.get(currentIsland);
+      return isl ? isl.hexes : null;
+    }
+
+    function renderEditPaint() {
+      paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+      const hexes = curHexes();
+      if (!hexes) return;
+
+      // Fill land
+      paintCtx.fillStyle = ISLAND_FILL;
+      for (const offKey of hexes.keys()) {
+        const cell = windowCells.get(offKey);
+        if (cell) paintCtx.fill(cell.fillPath);
+      }
+
+      // Coastline borders — edges that face an empty neighbour
+      paintCtx.strokeStyle = BORDER_COL;
+      paintCtx.lineWidth = 1.5;
+      paintCtx.lineCap = 'round';
+      paintCtx.beginPath();
+      for (const offKey of hexes.keys()) {
+        const cell = windowCells.get(offKey);
+        if (!cell) continue;
+        for (const [dq, dr] of HEX_DIRS) {
+          if (hexes.has(key(cell.dq + dq, cell.dr + dr))) continue;
+          const edge = NEIGHBOR_TO_EDGE[dq + ',' + dr];
+          const a = cell.corners[edge[0]], b = cell.corners[edge[1]];
+          paintCtx.moveTo(a[0], a[1]);
+          paintCtx.lineTo(b[0], b[1]);
+        }
+      }
+      paintCtx.stroke();
+
+      // Hex labels
+      paintCtx.font = 'bold 5.5px Arial';
+      paintCtx.textAlign = 'center';
+      paintCtx.textBaseline = 'middle';
+      paintCtx.fillStyle = 'rgba(15,23,42,0.65)';
+      for (const [offKey, meta] of hexes) {
+        if (!meta || !meta.hex_label) continue;
+        const cell = windowCells.get(offKey);
+        if (cell) paintCtx.fillText(meta.hex_label, cell.cx, cell.cy);
+      }
+    }
+
+    function renderEditUi() {
       uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
 
-      // World origin marker
-      const origin = cells.get(key(0, 0));
+      // Center (0,0) marker
+      const origin = windowCells.get(key(0, 0));
       if (origin) {
         uiCtx.save();
         uiCtx.fillStyle = ORIGIN_FILL;
         uiCtx.fill(origin.basePath);
-        uiCtx.lineWidth = 2.2;
+        uiCtx.lineWidth = 2;
         uiCtx.strokeStyle = ORIGIN_STROKE;
         uiCtx.stroke(origin.basePath);
         uiCtx.restore();
       }
 
-      // Select-mode highlight
-      if (toolMode === 'select' && selectedHexKeys.size > 0) {
+      // Selected hex
+      if (selectedOff && windowCells.has(selectedOff)) {
+        const c = windowCells.get(selectedOff);
         uiCtx.save();
-        uiCtx.fillStyle = 'rgba(245,158,11,0.18)';
-        for (const id of selectedHexKeys) { const c = cells.get(id); if (c) uiCtx.fill(c.basePath); }
-        uiCtx.lineWidth = 1.8;
-        uiCtx.strokeStyle = 'rgba(180,110,0,0.65)';
-        for (const id of selectedHexKeys) { const c = cells.get(id); if (c) uiCtx.stroke(c.basePath); }
-        uiCtx.restore();
-      }
-
-      // Live marquee
-      if (isMarqueeActive && marqueeStart && marqueeEnd) {
-        const x1 = Math.min(marqueeStart.x, marqueeEnd.x), y1 = Math.min(marqueeStart.y, marqueeEnd.y);
-        const x2 = Math.max(marqueeStart.x, marqueeEnd.x), y2 = Math.max(marqueeStart.y, marqueeEnd.y);
-        uiCtx.save();
-        uiCtx.fillStyle = 'rgba(245,158,11,0.07)';
-        uiCtx.fillRect(x1, y1, x2-x1, y2-y1);
-        uiCtx.lineWidth = 1.2;
-        uiCtx.strokeStyle = 'rgba(180,110,0,0.7)';
-        uiCtx.setLineDash([4, 3]);
-        uiCtx.strokeRect(x1, y1, x2-x1, y2-y1);
+        uiCtx.lineWidth = 2;
+        uiCtx.strokeStyle = SEL_STROKE;
+        uiCtx.stroke(c.basePath);
         uiCtx.restore();
       }
 
       // Hover
-      if (hoverKey && cells.has(hoverKey)) {
+      if (hoverOff && windowCells.has(hoverOff)) {
+        const c = windowCells.get(hoverOff);
         uiCtx.save();
-        uiCtx.lineWidth = 1.8;
+        uiCtx.lineWidth = 1.6;
         uiCtx.strokeStyle = HOVER_STROKE;
-        uiCtx.stroke(cells.get(hoverKey).basePath);
+        uiCtx.stroke(c.basePath);
         uiCtx.restore();
-      }
-
-      // Island name labels — anchored to origin hex if set, otherwise skip
-      uiCtx.save();
-      uiCtx.font = 'bold 9px Arial';
-      uiCtx.textAlign = 'center';
-      uiCtx.textBaseline = 'middle';
-      for (const [name, idata] of islands) {
-        if (!idata.origin) continue;
-        const cell = cells.get(key(idata.origin.q, idata.origin.r));
-        if (!cell) continue;
-        const tw = uiCtx.measureText(name).width;
-        const padX = 4, padY = 2, rd = 3;
-        const bx = cell.cx - tw/2 - padX, by = cell.cy - 6 - padY;
-        const bw = tw + padX*2, bh = 11 + padY*2;
-        uiCtx.fillStyle = 'rgba(15,23,42,0.72)';
-        uiCtx.beginPath();
-        uiCtx.moveTo(bx+rd, by); uiCtx.lineTo(bx+bw-rd, by);
-        uiCtx.quadraticCurveTo(bx+bw, by, bx+bw, by+rd);
-        uiCtx.lineTo(bx+bw, by+bh-rd);
-        uiCtx.quadraticCurveTo(bx+bw, by+bh, bx+bw-rd, by+bh);
-        uiCtx.lineTo(bx+rd, by+bh);
-        uiCtx.quadraticCurveTo(bx, by+bh, bx, by+bh-rd);
-        uiCtx.lineTo(bx, by+rd);
-        uiCtx.quadraticCurveTo(bx, by, bx+rd, by);
-        uiCtx.closePath();
-        uiCtx.fill();
-        uiCtx.fillStyle = '#fff';
-        uiCtx.fillText(name, cell.cx, cell.cy - 1);
-      }
-      uiCtx.restore();
-    }
-
-    function redrawAllPaint() {
-      paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-      for (const [id, tile] of tiles) {
-        const cell = cells.get(id);
-        if (!cell) continue;
-        paintCtx.fillStyle = tileColor(tile);
-        paintCtx.fill(cell.fillPath);
       }
     }
 
     function schedulePaintRedraw() {
       if (paintRafId !== null) return;
-      paintRafId = requestAnimationFrame(() => { paintRafId = null; redrawAllPaint(); });
+      paintRafId = requestAnimationFrame(() => { paintRafId = null; renderEditPaint(); });
     }
 
-    // ── Island list ───────────────────────────────────────────────────────────
-
-    function getUniqueIslands() {
-      const map = new Map();
-      for (const tile of tiles.values()) {
-        const n = tile.island_name || '';
-        if (!n) continue;
-        if (!map.has(n)) map.set(n, { count: 0, hexType: tile.hex_type });
-        map.get(n).count++;
-      }
-      return Array.from(map.entries())
-        .map(([name, d]) => ({ name, count: d.count, hexType: d.hexType }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+    function updateHexCount() {
+      const hexes = curHexes();
+      const n = hexes ? hexes.size : 0;
+      hexCountStat.textContent = n + ' hex' + (n === 1 ? '' : 'es');
     }
+
+    // ── Island list ────────────────────────────────────────────────────────────
 
     function renderIslandList() {
-      const list = getUniqueIslands();
+      const names = Array.from(islands.keys()).sort((a, b) => a.localeCompare(b));
       islandListEl.innerHTML = '';
-      if (list.length === 0) {
-        islandListEl.innerHTML = '<div class="island-empty">No islands painted yet.</div>';
+      if (names.length === 0) {
+        islandListEl.innerHTML = '<div class="island-empty">No islands yet.</div>';
         return;
       }
-      for (const { name, count, hexType } of list) {
+      for (const name of names) {
+        const isl = islands.get(name);
         const row = document.createElement('div');
-        row.className = 'island-row' + (name === selectedIslandName ? ' selected' : '');
-        row.dataset.name = name;
+        row.className = 'island-row' + (name === currentIsland ? ' selected' : '');
 
         const dot = document.createElement('div');
         dot.className = 'island-dot';
-        dot.style.background = TILE_COLORS[hexType] || TILE_COLORS.island;
 
         const lbl = document.createElement('span');
         lbl.className = 'island-name-label';
@@ -933,621 +626,493 @@
 
         const cnt = document.createElement('span');
         cnt.className = 'island-count';
-        cnt.textContent = count;
+        cnt.textContent = isl.hexes.size;
 
-        // Open island editor button
-        const editBtn = document.createElement('button');
-        editBtn.style.cssText = 'font-size:11px;padding:2px 7px;border-radius:5px;margin-left:2px;';
-        editBtn.textContent = 'Edit';
-        editBtn.title = 'Open island editor';
-        editBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openIslandEditor(name);
-        });
-
-        row.addEventListener('click', () => {
-          selectedIslandName = name;
-          islandInput.value = name;
-          setPaintStatus();
-          for (const r of islandListEl.querySelectorAll('.island-row'))
-            r.classList.toggle('selected', r.dataset.name === name);
-        });
+        const del = document.createElement('button');
+        del.className = 'island-del';
+        del.textContent = '✕';
+        del.title = 'Delete island';
+        del.addEventListener('click', (e) => { e.stopPropagation(); deleteIsland(name); });
 
         row.appendChild(dot);
         row.appendChild(lbl);
         row.appendChild(cnt);
-        row.appendChild(editBtn);
+        row.appendChild(del);
+        row.addEventListener('click', () => selectIsland(name));
         islandListEl.appendChild(row);
       }
     }
 
-    // ── Island editor ─────────────────────────────────────────────────────────
-
-    function ensureIslandEntry(name) {
-      if (!islands.has(name)) islands.set(name, { origin: null });
+    function uniqueName(base) {
+      if (!islands.has(base)) return base;
+      let i = 2;
+      while (islands.has(base + '_' + i)) i++;
+      return base + '_' + i;
     }
 
-    function openIslandEditor(name) {
-      openIslandName = name;
-      selectedIslandHexKey = null;
-      ensureIslandEntry(name);
-
-      islandEditorTitle.textContent = 'Island Editor — ' + name;
-      islandEditor.style.display = '';
-
-      buildIslandCanvas(name);
-      renderIslandBase();
-      renderIslandUi();
-      updateIslandPane();
-
-      islandEditor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    function addIsland() {
+      let n = 1;
+      while (islands.has('island_' + n)) n++;
+      const name = 'island_' + n;
+      islands.set(name, { center: { q: 0, r: 0 }, hexes: new Map() });
+      selectIsland(name);
+      renderIslandList();
+      scheduleSave();
+      nameInput.focus();
+      nameInput.select();
     }
 
-    function buildIslandCanvas(name) {
-      islandCells.clear();
-
-      // Collect all tiles for this island
-      const islandTiles = [];
-      for (const [id, tile] of tiles) {
-        if (tile.island_name === name) {
-          const [q, r] = id.split(',').map(Number);
-          islandTiles.push({ q, r });
-        }
+    function deleteIsland(name) {
+      if (!confirm('Delete island "' + name + '"? This removes all its hexes.')) return;
+      islands.delete(name);
+      if (currentIsland === name) {
+        currentIsland = null;
+        selectedOff = null;
+        editorBody.style.display = 'none';
+        editorEmpty.style.display = '';
       }
-      if (islandTiles.length === 0) return;
+      renderIslandList();
+      scheduleSave();
+    }
 
-      // Find bounding box in pixel space
+    function selectIsland(name) {
+      if (!islands.has(name)) return;
+      currentIsland = name;
+      selectedOff = null;
+      const isl = islands.get(name);
+
+      editorEmpty.style.display = 'none';
+      editorBody.style.display = '';
+
+      nameInput.value = name;
+      centerQInput.value = isl.center.q;
+      centerRInput.value = isl.center.r;
+
+      buildWindowCells();
+      applyZoom();
+      renderEditBase();
+      renderEditPaint();
+      renderEditUi();
+      updateHexCount();
+      hideHexLabelBar();
+      renderIslandList();
+
+      // Center the scroll on the window centre
+      requestAnimationFrame(() => {
+        const zoom = Number(zoomInput.value);
+        const o = windowCells.get(key(0, 0));
+        if (o) {
+          boardWrap.scrollLeft = Math.max(0, o.cx * zoom - boardWrap.clientWidth / 2);
+          boardWrap.scrollTop  = Math.max(0, o.cy * zoom - boardWrap.clientHeight / 2);
+        }
+      });
+    }
+
+    // ── Metadata edits ──────────────────────────────────────────────────────────
+
+    nameInput.addEventListener('change', () => {
+      if (!currentIsland) return;
+      let next = nameInput.value.trim();
+      if (!next) { nameInput.value = currentIsland; return; }
+      if (next === currentIsland) return;
+      if (islands.has(next)) next = uniqueName(next);
+      const isl = islands.get(currentIsland);
+      islands.delete(currentIsland);
+      islands.set(next, isl);
+      currentIsland = next;
+      nameInput.value = next;
+      renderIslandList();
+      scheduleSave();
+    });
+
+    function commitCenter() {
+      if (!currentIsland) return;
+      const q = parseInt(centerQInput.value, 10);
+      const r = parseInt(centerRInput.value, 10);
+      const isl = islands.get(currentIsland);
+      if (Number.isFinite(q)) isl.center.q = q;
+      if (Number.isFinite(r)) isl.center.r = r;
+      scheduleSave();
+    }
+    centerQInput.addEventListener('change', commitCenter);
+    centerRInput.addEventListener('change', commitCenter);
+
+    zoomInput.addEventListener('input', () => { applyZoom(); scheduleSave(); });
+
+    // ── Painting ────────────────────────────────────────────────────────────────
+
+    function paintOff(offKey, mode) {
+      const hexes = curHexes();
+      if (!hexes) return;
+      if (!windowCells.has(offKey)) return; // outside radius-50 window
+      const actionId = mode + ':' + offKey;
+      if (actionId === lastActionOff) return;
+      lastActionOff = actionId;
+
+      if (mode === 'erase') {
+        if (!hexes.has(offKey)) return;
+        hexes.delete(offKey);
+        if (selectedOff === offKey) hideHexLabelBar();
+      } else {
+        if (!hexes.has(offKey)) hexes.set(offKey, {});
+        selectHex(offKey);
+      }
+      schedulePaintRedraw();
+      renderEditUi();
+      updateHexCount();
+      renderIslandList();
+      scheduleSave();
+    }
+
+    function mouseToOff(e) {
+      const rect = paintCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (paintCanvas.width / rect.width);
+      const py = (e.clientY - rect.top)  * (paintCanvas.height / rect.height);
+      // Convert canvas px back to axial via nearest-centre search (robust, small window)
+      let hit = null, best = HEX_SIZE * 1.25;
+      for (const [k, cell] of windowCells) {
+        const d = Math.hypot(px - cell.cx, py - cell.cy);
+        if (d < best) { best = d; hit = k; }
+      }
+      return hit;
+    }
+
+    paintCanvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    paintCanvas.addEventListener('mousedown', (e) => {
+      if (!currentIsland) return;
+      const off = mouseToOff(e);
+      if (!off) return;
+      isMouseDown = true;
+      mouseMode = e.button === 2 ? 'erase' : 'paint';
+      lastActionOff = '';
+      paintOff(off, mouseMode);
+    });
+
+    paintCanvas.addEventListener('mousemove', (e) => {
+      const off = mouseToOff(e);
+      const next = off || '';
+      if (next !== hoverOff) { hoverOff = next; renderEditUi(); }
+      if (off) {
+        const cell = windowCells.get(off);
+        hoverStat.textContent = 'Hover: q=' + cell.dq + ', r=' + cell.dr + ' (offset)';
+      } else {
+        hoverStat.textContent = 'Hover: —';
+      }
+      if (isMouseDown && off) paintOff(off, mouseMode);
+    });
+
+    paintCanvas.addEventListener('mouseleave', () => {
+      if (hoverOff) { hoverOff = ''; hoverStat.textContent = 'Hover: —'; renderEditUi(); }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!isMouseDown) return;
+      isMouseDown = false;
+      lastActionOff = '';
+      if (saveTimer !== null) { clearTimeout(saveTimer); flushSave(); }
+    });
+
+    // ── Hex label bar ─────────────────────────────────────────────────────────
+
+    function selectHex(offKey) {
+      selectedOff = offKey;
+      const cell = windowCells.get(offKey);
+      const isl = islands.get(currentIsland);
+      const meta = isl.hexes.get(offKey) || {};
+      const absQ = isl.center.q + cell.dq;
+      const absR = isl.center.r + cell.dr;
+      hexCoord.textContent = 'offset q=' + cell.dq + ', r=' + cell.dr + '  ·  world q=' + absQ + ', r=' + absR;
+      hexLabelInput.value = meta.hex_label || '';
+      hexLabelBar.classList.remove('hidden');
+      renderEditUi();
+    }
+
+    function hideHexLabelBar() {
+      selectedOff = null;
+      hexLabelBar.classList.add('hidden');
+      renderEditUi();
+    }
+
+    hexLabelSaveBtn.addEventListener('click', () => {
+      if (!selectedOff || !currentIsland) return;
+      const hexes = curHexes();
+      const meta = hexes.get(selectedOff);
+      if (!meta) return;
+      const v = hexLabelInput.value.trim();
+      if (v) meta.hex_label = v; else delete meta.hex_label;
+      schedulePaintRedraw();
+      scheduleSave();
+    });
+    hexLabelClearBtn.addEventListener('click', () => {
+      hexLabelInput.value = '';
+      hexLabelSaveBtn.click();
+    });
+    hexLabelInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') hexLabelSaveBtn.click(); });
+
+    // ── Preview (static full-map render) ───────────────────────────────────────
+
+    function openPreview() {
+      previewModal.classList.remove('hidden');
+      renderPreview();
+    }
+    function closePreview() { previewModal.classList.add('hidden'); }
+
+    previewBtn.addEventListener('click', openPreview);
+    previewCloseBtn.addEventListener('click', closePreview);
+    previewModal.addEventListener('click', (e) => { if (e.target === previewModal) closePreview(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
+
+    function collectWorldHexes() {
+      // Returns { set:Set("q,r"), hexes:[{q,r,meta}], labels:[{name,q,r}] }
+      const set = new Set();
+      const hexes = [];
+      const labels = [];
+      for (const [name, isl] of islands) {
+        if (isl.hexes.size === 0) continue;
+        for (const [offKey, meta] of isl.hexes) {
+          const [dq, dr] = offKey.split(',').map(Number);
+          const q = isl.center.q + dq, r = isl.center.r + dr;
+          set.add(key(q, r));
+          hexes.push({ q, r, meta });
+        }
+        labels.push({ name, q: isl.center.q, r: isl.center.r });
+      }
+      return { set, hexes, labels };
+    }
+
+    function renderPreview() {
+      const { set, hexes, labels } = collectWorldHexes();
+      const ctx = previewCanvas.getContext('2d');
+
+      const old = previewBody.querySelector('.preview-empty');
+      if (old) old.remove();
+
+      if (hexes.length === 0) {
+        previewCanvas.style.display = 'none';
+        const msg = document.createElement('div');
+        msg.className = 'preview-empty';
+        msg.textContent = 'No island hexes painted yet.';
+        previewBody.appendChild(msg);
+        return;
+      }
+      previewCanvas.style.display = '';
+
+      // Bounding box around the available islands only (no fixed bounds, no calm belt)
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const { q, r } of islandTiles) {
-        const p = axialToPixelDisplay(q, r);
+      for (const { q, r } of hexes) {
+        const p = axialToPixel(q, r);
         if (p.x - HEX_W/2 < minX) minX = p.x - HEX_W/2;
         if (p.x + HEX_W/2 > maxX) maxX = p.x + HEX_W/2;
         if (p.y - HEX_H/2 < minY) minY = p.y - HEX_H/2;
         if (p.y + HEX_H/2 > maxY) maxY = p.y + HEX_H/2;
       }
+      const margin = HEX_H * 1.5;
+      minX -= margin; maxX += margin; minY -= margin; maxY += margin;
 
-      const w = Math.ceil(maxX - minX + ISLE_PAD * 2);
-      const h = Math.ceil(maxY - minY + ISLE_PAD * 2);
-      islandBaseCanvas.width = w; islandBaseCanvas.height = h;
-      islandUiCanvas.width = w;   islandUiCanvas.height = h;
-      islandCanvasStack.style.width = w + 'px';
-      islandCanvasStack.style.height = h + 'px';
+      const w = Math.ceil(maxX - minX);
+      const h = Math.ceil(maxY - minY);
+      // Scale to fit the viewport while staying crisp
+      const maxW = Math.min(window.innerWidth * 0.9, 1400);
+      const maxH = Math.min(window.innerHeight * 0.78, 1000);
+      const scale = Math.min(1.4, maxW / w, maxH / h);
 
-      for (const { q, r } of islandTiles) {
-        const p = axialToPixelDisplay(q, r);
-        const cx = p.x - minX + ISLE_PAD;
-        const cy = p.y - minY + ISLE_PAD;
-        islandCells.set(key(q, r), {
-          q, r, cx, cy,
-          basePath: makeHexPath(cx, cy, HEX_SIZE),
-          fillPath: makeHexPath(cx, cy, HEX_SIZE + 1)
-        });
-      }
-    }
+      previewCanvas.width = Math.ceil(w * scale);
+      previewCanvas.height = Math.ceil(h * scale);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
-    function renderIslandBase() {
-      if (!openIslandName) return;
-      islandBaseCtx.clearRect(0, 0, islandBaseCanvas.width, islandBaseCanvas.height);
+      const toXY = (q, r) => { const p = axialToPixel(q, r); return { x: p.x - minX, y: p.y - minY }; };
 
-      // Fill all island hexes
-      for (const [id, cell] of islandCells) {
-        const tile = tiles.get(id);
-        islandBaseCtx.fillStyle = tile ? tileColor(tile) : TILE_COLORS.island;
-        islandBaseCtx.fill(cell.fillPath);
+      // Sea background
+      ctx.fillStyle = SEA_COLOR;
+      ctx.fillRect(0, 0, w, h);
+
+      // Land fills
+      ctx.fillStyle = ISLAND_FILL;
+      for (const { q, r } of hexes) {
+        const c = toXY(q, r);
+        ctx.fill(makeHexPath(c.x, c.y, HEX_SIZE + 0.6));
       }
 
-      // Grid lines
-      islandBaseCtx.lineWidth = 0.7;
-      islandBaseCtx.strokeStyle = 'rgba(0,0,0,0.15)';
-      for (const cell of islandCells.values()) islandBaseCtx.stroke(cell.basePath);
-
-      // Hex labels (from tile.hex_label)
-      islandBaseCtx.font = 'bold 5.5px Arial';
-      islandBaseCtx.textAlign = 'center';
-      islandBaseCtx.textBaseline = 'middle';
-      islandBaseCtx.fillStyle = 'rgba(15,23,42,0.55)';
-      for (const [id, cell] of islandCells) {
-        const tile = tiles.get(id);
-        if (tile && tile.hex_label) islandBaseCtx.fillText(tile.hex_label, cell.cx, cell.cy);
-      }
-    }
-
-    function renderIslandUi() {
-      if (!openIslandName) return;
-      islandUiCtx.clearRect(0, 0, islandUiCanvas.width, islandUiCanvas.height);
-
-      // Origin marker
-      const idata = islands.get(openIslandName);
-      if (idata && idata.origin) {
-        const oc = islandCells.get(key(idata.origin.q, idata.origin.r));
-        if (oc) {
-          islandUiCtx.save();
-          islandUiCtx.lineWidth = 2.2;
-          islandUiCtx.strokeStyle = ORIGIN_STROKE;
-          islandUiCtx.stroke(oc.basePath);
-          islandUiCtx.restore();
+      // Coastline borders
+      ctx.strokeStyle = BORDER_COL;
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const { q, r } of hexes) {
+        const c = toXY(q, r);
+        const corners = hexCorners(c.x, c.y, HEX_SIZE);
+        for (const [dq, dr] of HEX_DIRS) {
+          if (set.has(key(q + dq, r + dr))) continue;
+          const edge = NEIGHBOR_TO_EDGE[dq + ',' + dr];
+          const a = corners[edge[0]], b = corners[edge[1]];
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
         }
       }
+      ctx.stroke();
 
-      // Selected hex highlight
-      if (selectedIslandHexKey) {
-        const sc = islandCells.get(selectedIslandHexKey);
-        if (sc) {
-          islandUiCtx.save();
-          islandUiCtx.fillStyle = 'rgba(37,99,235,0.18)';
-          islandUiCtx.fill(sc.basePath);
-          islandUiCtx.lineWidth = 1.8;
-          islandUiCtx.strokeStyle = 'rgba(37,99,235,0.7)';
-          islandUiCtx.stroke(sc.basePath);
-          islandUiCtx.restore();
-        }
+      // Per-hex labels
+      ctx.font = 'bold 6px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(15,23,42,0.7)';
+      for (const { q, r, meta } of hexes) {
+        if (!meta || !meta.hex_label) continue;
+        const c = toXY(q, r);
+        ctx.fillText(meta.hex_label, c.x, c.y);
       }
+
+      // Island name labels on top
+      ctx.font = 'bold 11px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const { name, q, r } of labels) {
+        const c = toXY(q, r);
+        const tw = ctx.measureText(name).width;
+        const padX = 5, padY = 3, rd = 4;
+        const bx = c.x - tw/2 - padX, by = c.y - 7 - padY;
+        const bw = tw + padX*2, bh = 14 + padY*2;
+        ctx.fillStyle = 'rgba(15,23,42,0.78)';
+        ctx.beginPath();
+        ctx.moveTo(bx+rd, by); ctx.lineTo(bx+bw-rd, by);
+        ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+rd);
+        ctx.lineTo(bx+bw, by+bh-rd);
+        ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-rd, by+bh);
+        ctx.lineTo(bx+rd, by+bh);
+        ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-rd);
+        ctx.lineTo(bx, by+rd);
+        ctx.quadraticCurveTo(bx, by, bx+rd, by);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(name, c.x, c.y);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 
-    function updateIslandPane() {
-      if (!selectedIslandHexKey) {
-        islandPaneEmpty.style.display = '';
-        islandHexSection.style.display = 'none';
-        return;
-      }
-      islandPaneEmpty.style.display = 'none';
-      islandHexSection.style.display = '';
-      const [q, r] = selectedIslandHexKey.split(',').map(Number);
-      islandHexCoords.textContent = 'q=' + q + ', r=' + r;
-      const tile = tiles.get(selectedIslandHexKey);
-      hexLabelInput.value = (tile && tile.hex_label) ? tile.hex_label : '';
-    }
-
-    // Island canvas click
-    islandBaseCanvas.addEventListener('click', function(e) {
-      if (!openIslandName) return;
-      const rect = islandBaseCanvas.getBoundingClientRect();
-      const scaleX = islandBaseCanvas.width / rect.width;
-      const scaleY = islandBaseCanvas.height / rect.height;
-      const cx = (e.clientX - rect.left) * scaleX;
-      const cy = (e.clientY - rect.top)  * scaleY;
-
-      // Find closest cell whose center is within HEX_SIZE
-      let hit = null, bestDist = HEX_SIZE * 1.2;
-      for (const [id, cell] of islandCells) {
-        const d = Math.hypot(cx - cell.cx, cy - cell.cy);
-        if (d < bestDist) { bestDist = d; hit = id; }
-      }
-
-      selectedIslandHexKey = hit;
-      renderIslandUi();
-      updateIslandPane();
-    });
-
-    hexLabelSaveBtn.addEventListener('click', function() {
-      if (!selectedIslandHexKey) return;
-      const tile = tiles.get(selectedIslandHexKey);
-      if (!tile) return;
-      tile.hex_label = hexLabelInput.value.trim() || undefined;
-      if (!tile.hex_label) delete tile.hex_label;
-      renderIslandBase();
-      scheduleSave();
-    });
-
-    hexLabelInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') hexLabelSaveBtn.click();
-    });
-
-    // Shift wheel — move all tiles of the open island by (dq, dr)
-    document.querySelectorAll('.wheel-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        if (!openIslandName) return;
-        const dq = parseInt(btn.dataset.dq, 10);
-        const dr = parseInt(btn.dataset.dr, 10);
-        shiftIsland(openIslandName, dq, dr);
-      });
-    });
-
-    function shiftIsland(name, dq, dr) {
-      // Collect all tiles for this island
-      const toMove = [];
-      for (const [id, tile] of tiles) {
-        if (tile.island_name === name) {
-          const [q, r] = id.split(',').map(Number);
-          toMove.push({ q, r, tile });
-        }
-      }
-      if (toMove.length === 0) return;
-
-      // Check all destinations are in bounds before committing
-      for (const { q, r } of toMove) {
-        if (!inBounds(q + dq, r + dr)) return; // blocked — any hex out of bounds
-      }
-
-      // Remove old keys
-      for (const { q, r } of toMove) tiles.delete(key(q, r));
-
-      // Re-insert at shifted positions
-      for (const { q, r, tile } of toMove) {
-        tiles.set(key(q + dq, r + dr), tile);
-      }
-
-      // Clear any world-map selection so stale keys don't ghost-apply
-      selectedHexKeys.clear();
-      selectionCard.style.display = 'none';
-
-      // Rebuild island canvas and re-render
-      buildIslandCanvas(name);
-      renderIslandBase();
-      // Update selectedIslandHexKey to follow the shift
-      if (selectedIslandHexKey) {
-        const [sq, sr] = selectedIslandHexKey.split(',').map(Number);
-        selectedIslandHexKey = key(sq + dq, sr + dr);
-      }
-      renderIslandUi();
-      updateIslandPane();
-      schedulePaintRedraw();
-      renderIslandList();
-      renderUi();
-      scheduleSave();
-    }
-
-    islandEditorCloseBtn.addEventListener('click', function() {
-      islandEditor.style.display = 'none';
-      openIslandName = null;
-      selectedIslandHexKey = null;
-    });
-
-    // ── Tool mode ─────────────────────────────────────────────────────────────
-
-    function setToolMode(mode) {
-      toolMode = mode;
-      toolDrawBtn.classList.toggle('active', mode === 'draw');
-      toolSelectBtn.classList.toggle('active', mode === 'select');
-      if (mode === 'draw') {
-        paintCanvas.style.cursor = 'crosshair';
-        hintNote.textContent = 'Left click / drag = paint  ·  Right click / drag = erase';
-        drawFields.classList.add('active');
-        drawFields.classList.remove('inactive');
-        selectedHexKeys.clear();
-        isMarqueeActive = false;
-        marqueeStart = marqueeEnd = null;
-        selectionCard.style.display = 'none';
-      } else {
-        paintCanvas.style.cursor = 'default';
-        hintNote.textContent = 'Left drag = marquee  ·  Right click = select blob  ·  Shift = add  ·  Esc = clear';
-        drawFields.classList.remove('active');
-        drawFields.classList.add('inactive');
-      }
-      renderUi();
-    }
-
-    toolDrawBtn.addEventListener('click', () => setToolMode('draw'));
-    toolSelectBtn.addEventListener('click', () => setToolMode('select'));
-
-    window.addEventListener('keydown', function(e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-      if (e.key === 'd' || e.key === 'D') setToolMode('draw');
-      if (e.key === 's' || e.key === 'S') setToolMode('select');
-      if (e.key === 'Escape' && toolMode === 'select') clearSelection();
-    });
-
-    // ── Select mode ───────────────────────────────────────────────────────────
-
-    function hexesInMarquee(x1, y1, x2, y2) {
-      const minX = Math.min(x1,x2), maxX = Math.max(x1,x2);
-      const minY = Math.min(y1,y2), maxY = Math.max(y1,y2);
-      const found = [];
-      for (const [id, cell] of cells) {
-        if (cell.cx >= minX && cell.cx <= maxX && cell.cy >= minY && cell.cy <= maxY) found.push(id);
-      }
-      return found;
-    }
-
-    function clearSelection() {
-      selectedHexKeys.clear();
-      isMarqueeActive = false;
-      marqueeStart = marqueeEnd = null;
-      selectionCard.style.display = 'none';
-      renderUi();
-    }
-
-
-    function updateSelectionCard() {
-      if (selectedHexKeys.size === 0) { selectionCard.style.display = 'none'; return; }
-      selectionCard.style.display = '';
-      selInfo.textContent = selectedHexKeys.size + ' hex' + (selectedHexKeys.size !== 1 ? 'es' : '') + ' selected';
-      const names = new Set(), types = new Set();
-      for (const id of selectedHexKeys) {
-        const t = tiles.get(id);
-        names.add(t ? (t.island_name || '') : '(empty)');
-        types.add(t ? (t.hex_type || '') : '(empty)');
-      }
-      const uName = names.size === 1 ? [...names][0] : null;
-      const uType = types.size === 1 ? [...types][0] : null;
-      selNameInput.value = uName !== null ? uName : '';
-      selNameInput.placeholder = uName !== null ? '' : '(mixed)';
-      selTypeInput.value = uType !== null ? uType : '';
-      if (uName !== null && uName !== '(empty)') islandInput.value = uName;
-      if (uType !== null && uType !== '(empty)') typeInput.value = uType;
-      setPaintStatus();
-    }
-
-    selApplyBtn.addEventListener('click', function() {
-      if (!selectedHexKeys.size) return;
-      const newName = selNameInput.value.trim();
-      const newType = selTypeInput.value;
-      for (const id of selectedHexKeys) {
-        const existing = tiles.get(id) || { hex_type: 'island', island_name: '' };
-        tiles.set(id, {
-          ...existing,
-          hex_type:    newType || existing.hex_type,
-          island_name: newName !== '' ? newName : existing.island_name
-        });
-      }
-      // Ensure island entry exists for any new name
-      if (newName) ensureIslandEntry(newName);
-      schedulePaintRedraw();
-      setPaintStatus();
-      renderIslandList();
-      renderUi();
-      scheduleSave();
-    });
-
-    selEraseBtn.addEventListener('click', function() {
-      if (!selectedHexKeys.size) return;
-      for (const id of selectedHexKeys) tiles.delete(id);
-      selectedHexKeys.clear();
-      schedulePaintRedraw();
-      setPaintStatus();
-      renderIslandList();
-      selectionCard.style.display = 'none';
-      renderUi();
-      scheduleSave();
-    });
-
-    // ── Paint (draw mode) ─────────────────────────────────────────────────────
-
-    function applyPaint(q, r, mode) {
-      if (!inBounds(q, r)) return;
-      const id = key(q, r);
-      const actionId = mode + ':' + id + ':' + typeInput.value + ':' + islandInput.value;
-      if (actionId === lastActionKey) return;
-      lastActionKey = actionId;
-      if (mode === 'erase') {
-        if (!tiles.has(id)) return;
-        tiles.delete(id);
-      } else {
-        const next = { hex_type: typeInput.value, island_name: islandInput.value.trim() };
-        const cur = tiles.get(id);
-        if (cur && cur.hex_type === next.hex_type && cur.island_name === next.island_name) return;
-        tiles.set(id, next);
-        ensureIslandEntry(next.island_name);
-      }
-      schedulePaintRedraw();
-      setPaintStatus();
-      renderIslandList();
-      renderUi();
-      scheduleSave();
-    }
-
-    // ── Mouse events ──────────────────────────────────────────────────────────
-
-    paintCanvas.addEventListener('contextmenu', e => e.preventDefault());
-
-    paintCanvas.addEventListener('mousedown', function(e) {
-      if (toolMode === 'draw') {
-        const cell = mouseToCell(e);
-        if (!inBounds(cell.q, cell.r)) return;
-        isMouseDown = true;
-        mouseMode = e.button === 2 ? 'erase' : 'paint';
-        applyPaint(cell.q, cell.r, mouseMode);
-      } else {
-        e.preventDefault();
-        const cell = mouseToCell(e);
-        if (e.button === 2) {
-          if (inBounds(cell.q, cell.r) && tiles.has(key(cell.q, cell.r))) {
-            const clickedName = tiles.get(key(cell.q, cell.r)).island_name;
-            if (!e.shiftKey) selectedHexKeys.clear();
-            if (clickedName) {
-              // Select every tile sharing this island name
-              for (const [id, tile] of tiles) {
-                if (tile.island_name === clickedName) selectedHexKeys.add(id);
-              }
-            } else {
-              selectedHexKeys.add(key(cell.q, cell.r));
-            }
-            updateSelectionCard();
-            renderUi();
-          }
-          return;
-        }
-        if (e.button !== 0) return;
-        const pos = getMouseCanvasPos(e);
-        isMouseDown = true;
-        isMarqueeActive = true;
-        marqueeStart = { x: pos.x, y: pos.y };
-        marqueeEnd   = { x: pos.x, y: pos.y };
-        if (!e.shiftKey) selectedHexKeys.clear();
-      }
-    });
-
-    window.addEventListener('mouseup', function(e) {
-      if (!isMouseDown) return;
-      if (toolMode === 'select' && isMarqueeActive) {
-        isMarqueeActive = false;
-        if (marqueeStart && marqueeEnd) {
-          const ids = hexesInMarquee(marqueeStart.x, marqueeStart.y, marqueeEnd.x, marqueeEnd.y);
-          if (ids.length === 0) {
-            const cell = mouseToCell(e);
-            if (inBounds(cell.q, cell.r)) {
-              const id = key(cell.q, cell.r);
-              if (selectedHexKeys.has(id) && !e.shiftKey) selectedHexKeys.delete(id);
-              else selectedHexKeys.add(id);
-            }
-          } else {
-            for (const id of ids) selectedHexKeys.add(id);
-          }
-        }
-        marqueeStart = marqueeEnd = null;
-        updateSelectionCard();
-        renderUi();
-      }
-      isMouseDown = false;
-      lastActionKey = '';
-      if (saveTimer !== null) { clearTimeout(saveTimer); flushSave(); }
-    });
-
-    paintCanvas.addEventListener('mousemove', function(e) {
-      const cell    = mouseToCell(e);
-      const nextKey = inBounds(cell.q, cell.r) ? key(cell.q, cell.r) : '';
-      if (nextKey !== hoverKey) { hoverKey = nextKey; renderUi(); }
-      hoverStatus.textContent = hoverKey ? 'Hover: q=' + cell.q + ', r=' + cell.r : 'Hover: —';
-      if (toolMode === 'draw') {
-        if (isMouseDown && hoverKey) applyPaint(cell.q, cell.r, mouseMode);
-      } else {
-        if (isMouseDown && isMarqueeActive) { marqueeEnd = getMouseCanvasPos(e); renderUi(); }
-      }
-    });
-
-    paintCanvas.addEventListener('mouseleave', function() {
-      if (hoverKey) { hoverKey = ''; hoverStatus.textContent = 'Hover: —'; renderUi(); }
-    });
-
-    function getMouseCanvasPos(e) {
-      const rect = paintCanvas.getBoundingClientRect();
-      return {
-        x: (e.clientX - rect.left) * (paintCanvas.width / rect.width),
-        y: (e.clientY - rect.top)  * (paintCanvas.height / rect.height)
-      };
-    }
-
-    function mouseToCell(e) {
-      const p = getMouseCanvasPos(e);
-      return pixelToAxialDisplay(p.x + bounds.minX - PAD, p.y + bounds.minY - PAD);
-    }
-
-    // ── Zoom / scroll ─────────────────────────────────────────────────────────
-
-    function getZoom() { return Number(zoomInput.value); }
-
-    function setZoom(value) {
-      const zoom = Number(value);
-      zoomInput.value = String(zoom);
-      zoomLabel.textContent = zoom.toFixed(1) + 'x';
-      const w = baseCanvas.width * zoom + 'px';
-      const h = baseCanvas.height * zoom + 'px';
-      canvasStack.style.width = w; canvasStack.style.height = h;
-      for (const c of [baseCanvas, paintCanvas, uiCanvas]) { c.style.width = w; c.style.height = h; }
-      scheduleSave();
-    }
-
-    function scrollToDisplayCell(q, r) {
-      const zoom = getZoom();
-      const p = displayToCanvas(q, r);
-      boardWrap.scrollLeft = Math.max(0, p.x * zoom - boardWrap.clientWidth / 2);
-      boardWrap.scrollTop  = Math.max(0, p.y * zoom - boardWrap.clientHeight / 2);
-    }
-
-    zoomInput.addEventListener('input', () => setZoom(zoomInput.value));
-
-    // ── Persistence ───────────────────────────────────────────────────────────
-
-    function buildRows() {
-      const rows = [];
-      for (const [id, tile] of tiles) {
-        const [q, r] = id.split(',').map(Number);
-        const row = { q, r, hex_type: tile.hex_type, island_name: tile.island_name };
-        if (tile.hex_label) row.hex_label = tile.hex_label;
-        rows.push(row);
-      }
-      // Auto-add calm belt
-      for (let r = R_MIN; r <= R_MAX; r++) {
-        if (!isCalmBelt(r)) continue;
-        for (let q = rowQMin(r); q <= rowQMax(r); q++) {
-          if (!tiles.has(key(q, r))) rows.push({ q, r, hex_type: 'calm_belt', island_name: '' });
-        }
-      }
-      return rows.sort((a, b) => (a.q - b.q) || (a.r - b.r));
-    }
-
-    function buildIslandsPayload() {
-      const obj = {};
-      for (const [name, data] of islands) {
-        obj[name] = { origin: data.origin || null };
-      }
-      return obj;
-    }
+    // ── Export / import ──────────────────────────────────────────────────────────
 
     function buildJsonPayload() {
+      const islandsObj = {};
+      const tiles = [];
+      for (const [name, isl] of islands) {
+        islandsObj[name] = { origin: { q: isl.center.q, r: isl.center.r } };
+        for (const [offKey, meta] of isl.hexes) {
+          const [dq, dr] = offKey.split(',').map(Number);
+          tiles.push({
+            q: isl.center.q + dq,
+            r: isl.center.r + dr,
+            hex_type: 'island',
+            island_name: name,
+            ...meta,            // hex_label and any future per-tile metadata
+          });
+        }
+      }
+      tiles.sort((a, b) => (a.q - b.q) || (a.r - b.r));
       return {
-        version: 2,
-        format: 'grand_line_map_editor',
+        version: 1,
+        format: 'island_editor',
         saved_at: new Date().toISOString(),
-        display_origin_old_world: { q: DISPLAY_Q_OFFSET, r: DISPLAY_R_OFFSET },
-        paint_defaults: { island_name: islandInput.value, hex_type: typeInput.value },
-        view: { zoom: Number(zoomInput.value) },
-        islands: buildIslandsPayload(),
-        tiles: buildRows()
+        edit_radius: EDIT_RADIUS,
+        islands: islandsObj,
+        tiles,
       };
     }
 
     function loadJsonPayload(data) {
       if (!data || typeof data !== 'object') throw new Error('Invalid JSON file.');
       if (!Array.isArray(data.tiles)) throw new Error('JSON file is missing a tiles array.');
-      tiles.clear();
-      islands.clear();
 
+      // Group tiles by island; only import land (island) tiles with a name.
+      const groups = new Map(); // name -> [{q, r, meta}]
       for (const row of data.tiles) {
         if (!row || typeof row !== 'object') continue;
         const q = Number(row.q), r = Number(row.r);
-        if (!Number.isFinite(q) || !Number.isFinite(r) || !inBounds(q, r)) continue;
-        const tile = { hex_type: String(row.hex_type || ''), island_name: String(row.island_name || row.island_id || '') };
-        if (row.hex_label) tile.hex_label = String(row.hex_label);
-        tiles.set(key(q, r), tile);
+        if (!Number.isFinite(q) || !Number.isFinite(r)) continue;
+        const type = String(row.hex_type || 'island').toLowerCase();
+        if (type !== 'island') continue; // skip redline / calm_belt / etc.
+        const name = String(row.island_name || row.island_id || '').trim();
+        if (!name) continue;
+        const meta = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (k === 'q' || k === 'r' || k === 'hex_type' || k === 'island_name' || k === 'island_id') continue;
+          meta[k] = v;
+        }
+        if (!groups.has(name)) groups.set(name, []);
+        groups.get(name).push({ q, r, meta });
       }
 
-      // Load islands metadata
+      const declaredCenters = {};
       if (data.islands && typeof data.islands === 'object') {
         for (const [name, idata] of Object.entries(data.islands)) {
-          islands.set(name, { origin: (idata && idata.origin) ? idata.origin : null });
+          const o = idata && idata.origin;
+          if (o && Number.isFinite(Number(o.q)) && Number.isFinite(Number(o.r))) {
+            declaredCenters[name] = { q: Number(o.q), r: Number(o.r) };
+          }
         }
       }
 
-      // Ensure all painted island names have an entry
-      for (const tile of tiles.values()) {
-        if (tile.island_name) ensureIslandEntry(tile.island_name);
+      islands.clear();
+      let dropped = 0;
+      for (const [name, rows] of groups) {
+        // Choose a center: declared origin, else rounded centroid of the hexes.
+        let center = declaredCenters[name];
+        if (!center) {
+          let sq = 0, sr = 0;
+          for (const { q, r } of rows) { sq += q; sr += r; }
+          center = cubeRound(sq / rows.length, sr / rows.length);
+        }
+        const hexes = new Map();
+        for (const { q, r, meta } of rows) {
+          const dq = q - center.q, dr = r - center.r;
+          if (hexDistance(dq, dr, 0, 0) > EDIT_RADIUS) { dropped++; continue; }
+          hexes.set(key(dq, dr), meta);
+        }
+        islands.set(name, { center, hexes });
+      }
+      // Carry over declared islands that had no tiles (empty islands).
+      for (const [name, center] of Object.entries(declaredCenters)) {
+        if (!islands.has(name)) islands.set(name, { center, hexes: new Map() });
       }
 
-      const pd = data.paint_defaults;
-      if (pd) {
-        if (typeof pd.island_name === 'string') islandInput.value = pd.island_name;
-        else if (typeof pd.island_id === 'string') islandInput.value = pd.island_id;
-        if (typeof pd.hex_type === 'string') typeInput.value = pd.hex_type;
-      }
-      if (data.view) {
-        const z = Number(data.view.zoom);
-        if (Number.isFinite(z)) setZoom(Math.max(0.4, Math.min(2.0, z)));
-      }
-
-      redrawAllPaint();
+      currentIsland = null;
+      selectedOff = null;
+      editorBody.style.display = 'none';
+      editorEmpty.style.display = '';
       renderIslandList();
-      renderUi();
-      setPaintStatus();
       flushSave();
+
+      if (dropped > 0) {
+        alert(dropped + ' hex(es) were further than radius ' + EDIT_RADIUS +
+              ' from their island center and were dropped on import.');
+      }
+    }
+
+    // ── Persistence (localStorage) ───────────────────────────────────────────────
+
+    function serializeIslands() {
+      const out = [];
+      for (const [name, isl] of islands) {
+        out.push([name, { center: isl.center, hexes: Array.from(isl.hexes.entries()) }]);
+      }
+      return out;
     }
 
     function flushSave() {
       saveTimer = null;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        tiles: Array.from(tiles.entries()),
-        islands: Array.from(islands.entries()),
-        island: islandInput.value,
-        type: typeInput.value,
-        zoom: zoomInput.value,
-        scrollLeft: boardWrap.scrollLeft,
-        scrollTop: boardWrap.scrollTop
-      }));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          islands: serializeIslands(),
+          currentIsland,
+          zoom: zoomInput.value,
+        }));
+      } catch (e) { /* storage full / disabled — ignore */ }
     }
 
     function scheduleSave() {
       if (saveTimer !== null) return;
-      saveTimer = window.setTimeout(flushSave, 180);
+      saveTimer = window.setTimeout(flushSave, 200);
     }
 
     function loadState() {
@@ -1555,46 +1120,36 @@
       if (!raw) return false;
       try {
         const data = JSON.parse(raw);
-        if (Array.isArray(data.tiles)) {
-          for (const entry of data.tiles) {
-            if (Array.isArray(entry) && entry.length === 2) tiles.set(entry[0], entry[1]);
-          }
-        }
         if (Array.isArray(data.islands)) {
-          for (const entry of data.islands) {
-            if (Array.isArray(entry) && entry.length === 2) islands.set(entry[0], entry[1]);
+          for (const [name, isl] of data.islands) {
+            const hexes = new Map();
+            if (Array.isArray(isl.hexes)) for (const [k, v] of isl.hexes) hexes.set(k, v || {});
+            islands.set(name, { center: isl.center || { q: 0, r: 0 }, hexes });
           }
         }
-        // Ensure all painted islands have entries
-        for (const tile of tiles.values()) {
-          if (tile.island_name) ensureIslandEntry(tile.island_name);
-        }
-        if (typeof data.island === 'string') islandInput.value = data.island;
-        if (typeof data.type   === 'string') typeInput.value   = data.type;
-        if (data.zoom) setZoom(data.zoom);
-        requestAnimationFrame(() => {
-          boardWrap.scrollLeft = data.scrollLeft || 0;
-          boardWrap.scrollTop  = data.scrollTop  || 0;
-        });
+        if (data.zoom) zoomInput.value = data.zoom;
+        renderIslandList();
+        if (data.currentIsland && islands.has(data.currentIsland)) selectIsland(data.currentIsland);
         return true;
       } catch (e) { return false; }
     }
 
-    // ── Toolbar buttons ───────────────────────────────────────────────────────
+    // ── Toolbar ──────────────────────────────────────────────────────────────────
 
-    downloadBtn.addEventListener('click', function() {
+    addIslandBtn.addEventListener('click', addIsland);
+
+    downloadBtn.addEventListener('click', () => {
       const blob = new Blob([JSON.stringify(buildJsonPayload(), null, 2)], { type: 'application/json' });
-      const url  = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'hex-map-' + new Date().toISOString().slice(0,19).replace(/[T:]/g,'-') + '.json';
+      a.download = 'islands-' + new Date().toISOString().slice(0,19).replace(/[T:]/g,'-') + '.json';
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     });
 
     uploadBtn.addEventListener('click', () => uploadInput.click());
-
-    uploadInput.addEventListener('change', async function(e) {
+    uploadInput.addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       try {
@@ -1606,45 +1161,19 @@
       } finally { uploadInput.value = ''; }
     });
 
-    clearBtn.addEventListener('click', function() {
-      tiles.clear(); islands.clear();
-      selectedHexKeys.clear();
-      selectedIslandName = null;
-      islandEditor.style.display = 'none';
-      openIslandName = null;
-      redrawAllPaint();
-      setPaintStatus();
+    clearBtn.addEventListener('click', () => {
+      if (!confirm('Clear ALL islands? This cannot be undone.')) return;
+      islands.clear();
+      currentIsland = null;
+      selectedOff = null;
+      editorBody.style.display = 'none';
+      editorEmpty.style.display = '';
       renderIslandList();
-      selectionCard.style.display = 'none';
-      renderUi();
       flushSave();
     });
 
-    resetBtn.addEventListener('click', function() {
-      setZoom(0.8);
-      requestAnimationFrame(() => { scrollToDisplayCell(0, 0); scheduleSave(); });
-    });
-
-    islandInput.addEventListener('input',  () => { setPaintStatus(); scheduleSave(); });
-    typeInput.addEventListener('change',   () => { setPaintStatus(); scheduleSave(); });
-    boardWrap.addEventListener('scroll', scheduleSave);
-
-    // ── Boot ──────────────────────────────────────────────────────────────────
-
-    buildCellCache();
-    renderBase();
-    setToolMode('draw');
-
-    const restored = loadState();
-    if (!restored) {
-      setZoom(0.8);
-      requestAnimationFrame(() => scrollToDisplayCell(0, 0));
-    }
-
-    redrawAllPaint();
-    renderIslandList();
-    setPaintStatus();
-    renderUi();
+    // ── Boot ───────────────────────────────────────────────────────────────────
+    loadState();
   </script>
 </body>
 </html>
