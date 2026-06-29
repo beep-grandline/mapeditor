@@ -320,6 +320,7 @@
     .preview-controls { display: flex; align-items: center; gap: 6px; }
     .preview-controls button { padding: 4px 10px; border-radius: 8px; line-height: 1; }
     .preview-controls #previewZoomLabel { font-size: 12px; color: var(--muted); min-width: 38px; text-align: center; }
+    .layer-toggle { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
     .modal-body {
       overflow: auto;
       padding: 12px;
@@ -383,6 +384,13 @@
             <div class="field">
               <label for="centerRInput">Center r</label>
               <input id="centerRInput" class="q-r" type="number" step="1">
+            </div>
+            <div class="field">
+              <label for="layerInput">Layer</label>
+              <select id="layerInput" style="width:92px;">
+                <option value="sea">Sea</option>
+                <option value="sky">Sky</option>
+              </select>
             </div>
             <div class="field">
               <label for="zoomInput">Zoom <span id="zoomLabel">0.8x</span></label>
@@ -493,6 +501,8 @@
           <span id="previewZoomLabel">2.5×</span>
           <button id="previewZoomIn" title="Zoom in">+</button>
           <button id="previewFit" title="Fit the whole map in view">Fit</button>
+          <label class="layer-toggle"><input type="checkbox" id="previewSea" checked> Sea</label>
+          <label class="layer-toggle"><input type="checkbox" id="previewSky" checked> Sky</label>
           <button class="modal-close" id="previewCloseBtn">✕</button>
         </div>
       </div>
@@ -670,6 +680,7 @@
     const nameInput    = document.getElementById('nameInput');
     const centerQInput = document.getElementById('centerQInput');
     const centerRInput = document.getElementById('centerRInput');
+    const layerInput   = document.getElementById('layerInput');
     const zoomInput    = document.getElementById('zoomInput');
     const zoomLabel    = document.getElementById('zoomLabel');
     const hexCountStat = document.getElementById('hexCountStat');
@@ -722,6 +733,10 @@
     const previewZoomOut  = document.getElementById('previewZoomOut');
     const previewZoomLabel= document.getElementById('previewZoomLabel');
     const previewFit      = document.getElementById('previewFit');
+    const previewSea      = document.getElementById('previewSea');
+    const previewSky      = document.getElementById('previewSky');
+    let   previewShowSea  = true;
+    let   previewShowSky  = true;
     let   previewScale    = 2.5;   // pixels-per-data-unit; constant so big maps stay readable
     let   previewContentW = 0;     // last-rendered content size (data units), for Fit
     let   previewContentH = 0;
@@ -921,7 +936,7 @@
 
         const lbl = document.createElement('span');
         lbl.className = 'island-name-label';
-        lbl.textContent = name;
+        lbl.textContent = (isl.layer === 'sky' ? '☁ ' : '') + name;
 
         const cnt = document.createElement('span');
         cnt.className = 'island-count';
@@ -953,7 +968,7 @@
       let n = 1;
       while (islands.has('island_' + n)) n++;
       const name = 'island_' + n;
-      islands.set(name, { center: { q: 0, r: 0 }, hexes: new Map() });
+      islands.set(name, { center: { q: 0, r: 0 }, hexes: new Map(), layer: 'sea' });
       selectIsland(name);
       renderIslandList();
       scheduleSave();
@@ -986,6 +1001,7 @@
       nameInput.value = name;
       centerQInput.value = isl.center.q;
       centerRInput.value = isl.center.r;
+      layerInput.value = isl.layer || 'sea';
 
       buildWindowCells();
       applyZoom();
@@ -1035,6 +1051,13 @@
     }
     centerQInput.addEventListener('change', commitCenter);
     centerRInput.addEventListener('change', commitCenter);
+
+    layerInput.addEventListener('change', () => {
+      if (!currentIsland) return;
+      islands.get(currentIsland).layer = layerInput.value;
+      renderIslandList();
+      scheduleSave();
+    });
 
     zoomInput.addEventListener('input', () => { applyZoom(); scheduleSave(); });
 
@@ -1397,51 +1420,121 @@
     previewZoomIn.addEventListener('click', () => stepPreview(1));
     previewZoomOut.addEventListener('click', () => stepPreview(-1));
     previewFit.addEventListener('click', fitPreview);
+    previewSea.addEventListener('change', () => { previewShowSea = previewSea.checked; renderPreview(); });
+    previewSky.addEventListener('change', () => { previewShowSky = previewSky.checked; renderPreview(); });
 
     previewBtn.addEventListener('click', openPreview);
     previewCloseBtn.addEventListener('click', closePreview);
     previewModal.addEventListener('click', (e) => { if (e.target === previewModal) closePreview(); });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePreview(); closeJsonModal(); } });
 
-    function collectWorldHexes() {
-      // Returns { set:Set("q,r"), hexes:[{q,r,meta}], labels:[{name,q,r}] }
-      const set = new Set();
-      const hexes = [];
-      const labels = [];
+    function collectWorldHexesByLayer() {
+      // Returns { sea:{set,hexes,labels}, sky:{set,hexes,labels} }
+      const mk = () => ({ set: new Set(), hexes: [], labels: [] });
+      const out = { sea: mk(), sky: mk() };
       for (const [name, isl] of islands) {
         if (isl.hexes.size === 0) continue;
+        const L = (isl.layer === 'sky') ? out.sky : out.sea;
         for (const [offKey, meta] of isl.hexes) {
           const [dq, dr] = offKey.split(',').map(Number);
           const q = isl.center.q + dq, r = isl.center.r + dr;
-          set.add(key(q, r));
-          hexes.push({ q, r, meta });
+          L.set.add(key(q, r));
+          L.hexes.push({ q, r, meta });
         }
-        labels.push({ name, q: isl.center.q, r: isl.center.r });
+        L.labels.push({ name, q: isl.center.q, r: isl.center.r });
       }
-      return { set, hexes, labels };
+      return out;
+    }
+
+    // Draw one layer's land fills, coastline borders, and per-hex labels.
+    // Sky layers are drawn translucent with a dashed cloud-coloured coastline.
+    function drawPreviewLayer(ctx, L, toXY, isSky) {
+      ctx.save();
+      if (isSky) ctx.globalAlpha = 0.6;
+
+      for (const { q, r, meta } of L.hexes) {
+        const c = toXY(q, r);
+        ctx.fillStyle = elevationColor(meta && meta.elevation);
+        ctx.fill(makeHexPath(c.x, c.y, HEX_SIZE + 0.6));
+      }
+
+      ctx.strokeStyle = isSky ? '#e0f2fe' : BORDER_COL;
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      if (isSky) ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      for (const { q, r } of L.hexes) {
+        const c = toXY(q, r);
+        const corners = hexCorners(c.x, c.y, HEX_SIZE);
+        for (const [dq, dr] of HEX_DIRS) {
+          if (L.set.has(key(q + dq, r + dr))) continue;
+          const edge = NEIGHBOR_TO_EDGE[dq + ',' + dr];
+          const a = corners[edge[0]], b = corners[edge[1]];
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
+        }
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.font = 'bold 6px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(15,23,42,0.7)';
+      for (const { q, r, meta } of L.hexes) {
+        if (!meta || !meta.hex_label) continue;
+        const c = toXY(q, r);
+        ctx.fillText(meta.hex_label, c.x, c.y);
+      }
+      ctx.restore();
+    }
+
+    function drawNameLabel(ctx, name, cx, cy, isSky) {
+      const tw = ctx.measureText(name).width;
+      const padX = 5, padY = 3, rd = 4;
+      const bx = cx - tw/2 - padX, by = cy - 7 - padY;
+      const bw = tw + padX*2, bh = 14 + padY*2;
+      ctx.fillStyle = isSky ? 'rgba(37,99,235,0.85)' : 'rgba(15,23,42,0.78)';
+      ctx.beginPath();
+      ctx.moveTo(bx+rd, by); ctx.lineTo(bx+bw-rd, by);
+      ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+rd);
+      ctx.lineTo(bx+bw, by+bh-rd);
+      ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-rd, by+bh);
+      ctx.lineTo(bx+rd, by+bh);
+      ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-rd);
+      ctx.lineTo(bx, by+rd);
+      ctx.quadraticCurveTo(bx, by, bx+rd, by);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText((isSky ? '☁ ' : '') + name, cx, cy);
     }
 
     function renderPreview() {
-      const { set, hexes, labels } = collectWorldHexes();
+      const layered = collectWorldHexesByLayer();
+      const visible = [];
+      if (previewShowSea) visible.push(layered.sea);
+      if (previewShowSky) visible.push(layered.sky);
+      const allHexes = visible.reduce((a, L) => a.concat(L.hexes), []);
       const ctx = previewCanvas.getContext('2d');
 
       const old = previewBody.querySelector('.preview-empty');
       if (old) old.remove();
 
-      if (hexes.length === 0) {
+      if (allHexes.length === 0) {
         previewContentW = 0; previewContentH = 0;
         previewCanvas.style.display = 'none';
         const msg = document.createElement('div');
         msg.className = 'preview-empty';
-        msg.textContent = 'No island hexes painted yet.';
+        msg.textContent = 'Nothing to show on the selected layer(s).';
         previewBody.appendChild(msg);
         return;
       }
       previewCanvas.style.display = '';
 
-      // Bounding box around the available islands only (no fixed bounds, no calm belt)
+      // Bounding box around the visible islands only (no fixed bounds, no calm belt)
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const { q, r } of hexes) {
+      for (const { q, r } of allHexes) {
         const p = axialToPixel(q, r);
         if (p.x - HEX_W/2 < minX) minX = p.x - HEX_W/2;
         if (p.x + HEX_W/2 > maxX) maxX = p.x + HEX_W/2;
@@ -1483,66 +1576,21 @@
       ctx.fillStyle = SEA_COLOR;
       ctx.fillRect(0, 0, w, h);
 
-      // Land fills — coloured by elevation (topographic)
-      for (const { q, r, meta } of hexes) {
-        const c = toXY(q, r);
-        ctx.fillStyle = elevationColor(meta && meta.elevation);
-        ctx.fill(makeHexPath(c.x, c.y, HEX_SIZE + 0.6));
+      // Draw each visible layer: sea opaque first, sky translucent on top.
+      for (const L of visible) {
+        drawPreviewLayer(ctx, L, toXY, L === layered.sky);
       }
 
-      // Coastline borders
-      ctx.strokeStyle = BORDER_COL;
-      ctx.lineWidth = 1.5;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      for (const { q, r } of hexes) {
-        const c = toXY(q, r);
-        const corners = hexCorners(c.x, c.y, HEX_SIZE);
-        for (const [dq, dr] of HEX_DIRS) {
-          if (set.has(key(q + dq, r + dr))) continue;
-          const edge = NEIGHBOR_TO_EDGE[dq + ',' + dr];
-          const a = corners[edge[0]], b = corners[edge[1]];
-          ctx.moveTo(a[0], a[1]);
-          ctx.lineTo(b[0], b[1]);
-        }
-      }
-      ctx.stroke();
-
-      // Per-hex labels
-      ctx.font = 'bold 6px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(15,23,42,0.7)';
-      for (const { q, r, meta } of hexes) {
-        if (!meta || !meta.hex_label) continue;
-        const c = toXY(q, r);
-        ctx.fillText(meta.hex_label, c.x, c.y);
-      }
-
-      // Island name labels on top
+      // Island name labels on top of all layers.
       ctx.font = 'bold 11px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (const { name, q, r } of labels) {
-        const c = toXY(q, r);
-        const tw = ctx.measureText(name).width;
-        const padX = 5, padY = 3, rd = 4;
-        const bx = c.x - tw/2 - padX, by = c.y - 7 - padY;
-        const bw = tw + padX*2, bh = 14 + padY*2;
-        ctx.fillStyle = 'rgba(15,23,42,0.78)';
-        ctx.beginPath();
-        ctx.moveTo(bx+rd, by); ctx.lineTo(bx+bw-rd, by);
-        ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+rd);
-        ctx.lineTo(bx+bw, by+bh-rd);
-        ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-rd, by+bh);
-        ctx.lineTo(bx+rd, by+bh);
-        ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-rd);
-        ctx.lineTo(bx, by+rd);
-        ctx.quadraticCurveTo(bx, by, bx+rd, by);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillText(name, c.x, c.y);
+      for (const L of visible) {
+        const isSky = (L === layered.sky);
+        for (const { name, q, r } of L.labels) {
+          const c = toXY(q, r);
+          drawNameLabel(ctx, name, c.x, c.y, isSky);
+        }
       }
 
       // World origin (0,0) marker — reference crosshair on top of everything
@@ -1605,6 +1653,7 @@
         }
 
         const out = { origin: { q: isl.center.q, r: isl.center.r }, radius, hexes };
+        if (isl.layer && isl.layer !== 'sea') out.layer = isl.layer;   // sparse: sea is default
         if (anyElev) out.elev = elev;
         if (Object.keys(meta).length) out.meta = meta;
         islandsObj[name] = out;
@@ -1637,8 +1686,9 @@
         const parts = [
           '"origin":' + JSON.stringify(isl.origin),
           '"radius":' + isl.radius,
-          '"hexes":' + JSON.stringify(isl.hexes),
         ];
+        if (isl.layer) parts.push('"layer":' + JSON.stringify(isl.layer));
+        parts.push('"hexes":' + JSON.stringify(isl.hexes));
         if (isl.elev) parts.push('"elev":' + JSON.stringify(isl.elev));
         if (isl.meta) parts.push('"meta":' + JSON.stringify(isl.meta));
         L.push('    ' + JSON.stringify(name) + ': { ' + parts.join(', ') + ' }' + (i < names.length - 1 ? ',' : ''));
@@ -1700,7 +1750,7 @@
           if (e > 0) m.elevation = Math.max(ELEV_MIN, Math.min(ELEV_MAX, e));
           hexes.set(key(dq, dr), m);
         });
-        islands.set(name, { center, hexes });
+        islands.set(name, { center, hexes, layer: (isl.layer === 'sky' ? 'sky' : 'sea') });
       }
       finishImport(dropped);
     }
@@ -1751,11 +1801,11 @@
           if (hexDistance(dq, dr, 0, 0) > EDIT_RADIUS) { dropped++; continue; }
           hexes.set(key(dq, dr), meta);
         }
-        islands.set(name, { center, hexes });
+        islands.set(name, { center, hexes, layer: 'sea' });
       }
       // Carry over declared islands that had no tiles (empty islands).
       for (const [name, center] of Object.entries(declaredCenters)) {
-        if (!islands.has(name)) islands.set(name, { center, hexes: new Map() });
+        if (!islands.has(name)) islands.set(name, { center, hexes: new Map(), layer: 'sea' });
       }
 
       finishImport(dropped);
@@ -1766,7 +1816,7 @@
     function serializeIslands() {
       const out = [];
       for (const [name, isl] of islands) {
-        out.push([name, { center: isl.center, hexes: Array.from(isl.hexes.entries()) }]);
+        out.push([name, { center: isl.center, layer: isl.layer || 'sea', hexes: Array.from(isl.hexes.entries()) }]);
       }
       return out;
     }
@@ -1797,7 +1847,7 @@
           for (const [name, isl] of data.islands) {
             const hexes = new Map();
             if (Array.isArray(isl.hexes)) for (const [k, v] of isl.hexes) hexes.set(k, v || {});
-            islands.set(name, { center: isl.center || { q: 0, r: 0 }, hexes });
+            islands.set(name, { center: isl.center || { q: 0, r: 0 }, hexes, layer: isl.layer || 'sea' });
           }
         }
         if (data.zoom) zoomInput.value = data.zoom;
