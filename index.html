@@ -492,6 +492,7 @@
           <button id="previewZoomOut" title="Zoom out">−</button>
           <span id="previewZoomLabel">2.5×</span>
           <button id="previewZoomIn" title="Zoom in">+</button>
+          <button id="previewFit" title="Fit the whole map in view">Fit</button>
           <button class="modal-close" id="previewCloseBtn">✕</button>
         </div>
       </div>
@@ -720,7 +721,10 @@
     const previewZoomIn   = document.getElementById('previewZoomIn');
     const previewZoomOut  = document.getElementById('previewZoomOut');
     const previewZoomLabel= document.getElementById('previewZoomLabel');
+    const previewFit      = document.getElementById('previewFit');
     let   previewScale    = 2.5;   // pixels-per-data-unit; constant so big maps stay readable
+    let   previewContentW = 0;     // last-rendered content size (data units), for Fit
+    let   previewContentH = 0;
 
     const showJsonBtn   = document.getElementById('showJsonBtn');
     const pasteJsonBtn  = document.getElementById('pasteJsonBtn');
@@ -1374,12 +1378,25 @@
     function closePreview() { previewModal.classList.add('hidden'); }
 
     function setPreviewScale(s) {
-      previewScale = Math.max(1, Math.min(8, Math.round(s * 2) / 2));
-      previewZoomLabel.textContent = previewScale + '×';
+      previewScale = Math.max(0.1, Math.min(8, Math.round(s * 100) / 100));
+      previewZoomLabel.textContent = (Math.round(previewScale * 100) / 100) + '×';
       if (!previewModal.classList.contains('hidden')) renderPreview();
     }
-    previewZoomIn.addEventListener('click', () => setPreviewScale(previewScale + 0.5));
-    previewZoomOut.addEventListener('click', () => setPreviewScale(previewScale - 0.5));
+    function stepPreview(dir) {
+      // Finer steps when zoomed out, coarser when zoomed in.
+      const step = previewScale <= 1 ? 0.25 : 0.5;
+      setPreviewScale(previewScale + dir * step);
+    }
+    function fitPreview() {
+      if (!previewContentW || !previewContentH) return;
+      const padW = 24, padH = 24;
+      const availW = Math.max(100, (previewBody.clientWidth  || window.innerWidth  * 0.9) - padW);
+      const availH = Math.max(100, (previewBody.clientHeight || window.innerHeight * 0.7) - padH);
+      setPreviewScale(Math.min(availW / previewContentW, availH / previewContentH));
+    }
+    previewZoomIn.addEventListener('click', () => stepPreview(1));
+    previewZoomOut.addEventListener('click', () => stepPreview(-1));
+    previewFit.addEventListener('click', fitPreview);
 
     previewBtn.addEventListener('click', openPreview);
     previewCloseBtn.addEventListener('click', closePreview);
@@ -1412,6 +1429,7 @@
       if (old) old.remove();
 
       if (hexes.length === 0) {
+        previewContentW = 0; previewContentH = 0;
         previewCanvas.style.display = 'none';
         const msg = document.createElement('div');
         msg.className = 'preview-empty';
@@ -1435,6 +1453,7 @@
 
       const w = Math.ceil(maxX - minX);
       const h = Math.ceil(maxY - minY);
+      previewContentW = w; previewContentH = h;   // remembered for Fit
 
       // Constant pixels-per-unit: resolution scales WITH the map, so big maps
       // produce a big scrollable canvas instead of shrinking to fit. Hi-DPI
