@@ -1448,6 +1448,14 @@
         if (p.y - HEX_H/2 < minY) minY = p.y - HEX_H/2;
         if (p.y + HEX_H/2 > maxY) maxY = p.y + HEX_H/2;
       }
+      // Always keep the world origin (0,0) in frame so its marker is visible.
+      {
+        const op = axialToPixel(0, 0);
+        if (op.x - HEX_W/2 < minX) minX = op.x - HEX_W/2;
+        if (op.x + HEX_W/2 > maxX) maxX = op.x + HEX_W/2;
+        if (op.y - HEX_H/2 < minY) minY = op.y - HEX_H/2;
+        if (op.y + HEX_H/2 > maxY) maxY = op.y + HEX_H/2;
+      }
       const margin = HEX_H * 1.5;
       minX -= margin; maxX += margin; minY -= margin; maxY += margin;
 
@@ -1536,6 +1544,26 @@
         ctx.fillStyle = '#fff';
         ctx.fillText(name, c.x, c.y);
       }
+
+      // World origin (0,0) marker — reference crosshair on top of everything
+      const o = toXY(0, 0);
+      ctx.save();
+      ctx.strokeStyle = '#dc2626';
+      ctx.fillStyle = '#dc2626';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, HEX_SIZE * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(o.x - HEX_SIZE, o.y); ctx.lineTo(o.x + HEX_SIZE, o.y);
+      ctx.moveTo(o.x, o.y - HEX_SIZE); ctx.lineTo(o.x, o.y + HEX_SIZE);
+      ctx.stroke();
+      ctx.font = 'bold 6px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('0,0', o.x, o.y + HEX_SIZE * 0.95);
+      ctx.restore();
+
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 
